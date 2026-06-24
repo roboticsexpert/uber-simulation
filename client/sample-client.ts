@@ -53,13 +53,18 @@ function decide(state: State): Assignment[] {
 async function main() {
   let session = process.env.SESSION_ID ?? "";
   if (!session) {
+    const name = (process.env.MATCHER_NAME ?? "").trim();
+    if (!name) {
+      console.error('❌ MATCHER_NAME اجباری است. مثال:  MATCHER_NAME="تیم آلفا" npm run client');
+      process.exit(1);
+    }
     const r = await fetch(`${BASE}/sessions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ name }),
     }).then((x) => x.json());
     session = r.id;
-    console.log(`🌍 دنیای جدید ساخته شد: ${session}`);
+    console.log(`🌍 دنیای جدید ساخته شد: ${session} (سازنده: ${name})`);
   }
 
   const ws = new WebSocket(`${WS_BASE}/sessions/${session}/ws`);

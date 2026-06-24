@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🏆 Uber-Sim — نتایج</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0f1419; --panel: #1a212b; --line: #2a3340; --text: #e6edf3;
+      --muted: #8b98a5; --accent: #d29922; --good: #3fb950; --bad: #f85149;
+      --font: "Vazirmatn", -apple-system, "Segoe UI", Tahoma, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); padding: 16px; }
+    header { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+    header h1 { font-size: 18px; margin: 0; font-weight: 800; }
+    header .sub { color: var(--muted); font-size: 12px; }
+    .spacer { flex: 1; }
+    a.back { font-family: var(--font); background: transparent; color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 9px 14px; font-weight: 700; font-size: 13px; text-decoration: none; }
+
+    .wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 10px 12px; text-align: start; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    th { color: var(--muted); font-weight: 700; font-size: 12px; position: sticky; top: 0; background: var(--panel); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #20283400; background: rgba(255,255,255,.02); }
+    td.num, th.num { text-align: end; font-variant-numeric: tabular-nums; }
+    .rank { font-weight: 800; color: var(--accent); }
+    .maker { font-weight: 800; }
+    .sid { color: var(--muted); font-size: 11px; }
+    .pill { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+    .pill.auto { background: #44403c; color: #f3d291; }
+    .pill.ext { background: #1f4f8f; }
+    .good { color: var(--good); } .bad { color: var(--bad); }
+    .empty { color: var(--muted); padding: 40px; text-align: center; }
+    .when { color: var(--muted); font-size: 11px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🏆 جدولِ نتایج</h1>
+    <span class="sub">سشن‌های تمام‌شده — مرتب بر اساس درآمد</span>
+    <span class="spacer"></span>
+    <a class="back" href="/">← همه دنیاها</a>
+  </header>
+
+  <div class="wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="num">#</th>
+          <th>سازنده</th>
+          <th>نوع</th>
+          <th class="num">💰 درآمد</th>
+          <th class="num">✅ تکمیل</th>
+          <th class="num">❌ کنسل</th>
+          <th class="num">⭐ مسافر</th>
+          <th class="num">⭐ راننده</th>
+          <th class="num">cycle</th>
+          <th>زمان</th>
+        </tr>
+      </thead>
+      <tbody id="rows">
+        <tr><td colspan="10" class="empty">در حال بارگذاری…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script src="/render.js"></script>
+  <script src="/results.js"></script>
+</body>
+</html>

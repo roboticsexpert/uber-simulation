@@ -34,6 +34,8 @@ function worldPos(key, fallback) {
 /** با تغییرِ tick یک دنیا، هدفِ انیمیشنِ هر ماشین را (عینِ منطقِ موتور) تنظیم می‌کند. */
 function setupAnim(w) {
   if (w.tick === lastTick[w.id]) return;
+  // اولین باری که این دنیا را می‌بینیم: ماشین‌ها فوراً سرِ جای واقعی بنشینند (بدون glideِ ورودی)
+  const firstSight = lastTick[w.id] === undefined;
   lastTick[w.id] = w.tick;
   const step = w.stepPerCycle || 8;
   const dur = Math.max(300, w.cycleMs || 1000);
@@ -47,7 +49,10 @@ function setupAnim(w) {
   for (const d of w.drivers) {
     const key = w.id + ":" + d.id;
     const tg = targets[d.id];
-    const pred = d.state === "ON_TRIP" && tg ? stepToward(d.pos, tg, step) : { x: d.pos.x, y: d.pos.y };
+    // در اولین مشاهده، هدف = همان موقعیت فعلی → ماشین ثابت و کامل ظاهر می‌شود
+    const pred = firstSight
+      ? { x: d.pos.x, y: d.pos.y }
+      : d.state === "ON_TRIP" && tg ? stepToward(d.pos, tg, step) : { x: d.pos.x, y: d.pos.y };
     const cur = worldPos(key, d.pos);
     anim[key] = { fx: cur.x, fy: cur.y, tx: pred.x, ty: pred.y, start: now, dur };
   }

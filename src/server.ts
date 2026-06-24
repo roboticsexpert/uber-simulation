@@ -5,13 +5,16 @@ import { dirname, join, normalize } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { config } from "./config.js";
 import { SessionManager } from "./session-manager.js";
+import { createStore } from "./store.js";
 import type { Engine } from "./engine.js";
 import type { Assignment } from "./types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, "..", "public");
 
-const manager = new SessionManager();
+const store = createStore();
+store.init().catch((e) => console.error("init دیتابیس ناموفق بود:", e));
+const manager = new SessionManager(store);
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -64,6 +67,12 @@ const server = createServer(async (req, res) => {
   if (method === "OPTIONS") return send(res, 204, {});
 
   try {
+    // ---- /results → نتایجِ آرشیوشدهٔ سشن‌های تمام‌شده (leaderboard) ----
+    if (seg[0] === "results" && seg.length === 1 && method === "GET") {
+      const limit = Number(url.searchParams.get("limit")) || 50;
+      return send(res, 200, { results: await store.listResults(limit) });
+    }
+
     // ---- /sessions ----
     if (seg[0] === "sessions") {
       // GET /sessions → لیست همهٔ دنیاها (vizState کامل هر کدام)
@@ -75,10 +84,12 @@ const server = createServer(async (req, res) => {
       //   auto=false → منتظرِ matcherِ بیرونی؛ با اولین GET /state شروع می‌شود.
       if (seg.length === 1 && method === "POST") {
         const body = await readJsonBody(req).catch(() => ({}));
-        const { id, engine } = manager.create();
+        const name = typeof body.name === "string" ? body.name.trim() : "";
+        if (!name) return send(res, 400, { error: "نام سازنده (name) اجباری است" });
+        const { id, engine } = manager.create(name.slice(0, 60));
         engine.autoMatch = !!body.auto;
         if (engine.autoMatch) engine.start();
-        return send(res, 201, { id, status: engine.status, autoMatch: engine.autoMatch });
+        return send(res, 201, { id, creator: engine.creator, status: engine.status, autoMatch: engine.autoMatch });
       }
 
       const id = seg[1];

@@ -27,6 +27,8 @@ function updatePanel() {
   pill.textContent = waiting ? "منتظر matcher" : world.status;
   pill.className = "pill " + (waiting ? "waiting" : world.status);
   const sb = world.scoreboard;
+  setText("creator", world.creator || "—");
+  setText("title", "🌍 " + (world.creator ? world.creator + " · " + ID : ID));
   setText("tick", `${world.tick} / ${world.sessionTicks}`);
   setText("minute", world.minute);
   setText("completed", sb.completed);

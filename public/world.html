@@ -24,7 +24,8 @@
     button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
     button.danger { background: #b62324; color: #fff; border: none; }
     main { flex: 1; display: flex; min-height: 0; }
-    #canvas { flex: 1; background: #11161c; }
+    /* min-width/height: 0 تا اندازهٔ بک‌استورِ canvas به layout بازخورد ندهد (جلوگیری از رشدِ آرامِ عرض) */
+    #canvas { flex: 1; min-width: 0; min-height: 0; display: block; background: #11161c; }
     #side { width: 250px; border-inline-start: 1px solid var(--line); padding: 16px; overflow: auto; }
     .stat { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
     .stat:last-child { border: none; }
@@ -48,6 +49,7 @@
   <main>
     <canvas id="canvas"></canvas>
     <div id="side">
+      <div class="stat"><span>👤 سازنده</span><b id="creator">—</b></div>
       <div class="stat"><span>cycle</span><b id="tick" dir="ltr">0 / 0</b></div>
       <div class="stat"><span>دقیقهٔ بازی</span><b id="minute">0</b></div>
       <div class="stat"><span>✅ تکمیل‌شده</span><b id="completed">0</b></div>

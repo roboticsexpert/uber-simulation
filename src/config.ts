@@ -11,8 +11,8 @@ const num = (name: string, def: number): number => {
 
 export const config = {
   // ---- نقشه / دنیا ----
-  worldWidth: num("WORLD_WIDTH", 100),
-  worldHeight: num("WORLD_HEIGHT", 100),
+  worldWidth: num("WORLD_WIDTH", 8_000),
+  worldHeight: num("WORLD_HEIGHT", 8_000),
 
   // ---- زمان / session ----
   /** هر cycle چند میلی‌ثانیهٔ واقعی طول می‌کشد (خواستهٔ کاربر: 30 ثانیه). */
@@ -23,9 +23,9 @@ export const config = {
   minutesPerTick: num("MINUTES_PER_TICK", 1),
 
   // ---- رانندگان ----
-  driverCount: num("DRIVER_COUNT", 20),
+  driverCount: num("DRIVER_COUNT", 100),
   /** سرعت راننده: واحد فاصله بر دقیقهٔ بازی. (placeholder — تیون می‌شود) */
-  driverSpeed: num("DRIVER_SPEED", 8),
+  driverSpeed: num("DRIVER_SPEED", 750),
   /** بدون سفر در این مدت (دقیقه) → خواب. */
   driverIdleSleepMinutes: num("DRIVER_IDLE_SLEEP", 30),
   /** مدت خواب راننده (دقیقه) قبل از بیداری. */
@@ -33,7 +33,7 @@ export const config = {
 
   // ---- مسافران / درخواست‌ها ----
   /** میانگین تعداد درخواست جدید در هر cycle (توزیع پواسون). */
-  riderArrivalRate: num("RIDER_ARRIVAL_RATE", 2),
+  riderArrivalRate: num("RIDER_ARRIVAL_RATE", 10),
   /** سقف صبر مسافر (دقیقه) از درخواست تا pickup. */
   riderPatienceMinutes: num("RIDER_PATIENCE", 5),
 

@@ -1,4 +1,6 @@
 import { Engine } from "./engine.js";
+import { config } from "./config.js";
+import type { SessionResult, SessionStore } from "./store.js";
 
 const MAX_SESSIONS = 16;
 
@@ -21,15 +23,38 @@ function randomName(): string {
 export class SessionManager {
   private sessions = new Map<string, Engine>();
 
-  create(): { id: string; engine: Engine } {
+  constructor(private store: SessionStore) {}
+
+  create(name: string): { id: string; engine: Engine } {
     if (this.sessions.size >= MAX_SESSIONS) {
       throw new Error(`سقفِ ${MAX_SESSIONS} سشن پر است`);
     }
     let id = randomName();
     while (this.sessions.has(id)) id = randomName(); // جلوگیری از تصادم
     const engine = new Engine();
+    engine.creator = name; // نامِ سازنده (اجباری)
+    // وقتی سشن تمام شد، نتیجهٔ نهایی را در دیتابیس آرشیو کن (خطا سشن را نمی‌اندازد).
+    engine.onFinish = () => {
+      this.store.saveResult(this.buildResult(id, engine)).catch((e) =>
+        console.error(`ذخیرهٔ نتیجهٔ سشن ${id} ناموفق بود:`, e),
+      );
+    };
     this.sessions.set(id, engine);
     return { id, engine };
+  }
+
+  /** نتیجهٔ نهاییِ سشن را از وضعیتِ فعلیِ engine می‌سازد. */
+  private buildResult(id: string, engine: Engine): SessionResult {
+    const v = engine.vizState();
+    return {
+      id,
+      creator: engine.creator,
+      autoMatch: engine.autoMatch,
+      ticks: v.tick,
+      seed: config.seed,
+      scoreboard: v.scoreboard,
+      config: { ...config },
+    };
   }
 
   get(id: string): Engine | undefined {

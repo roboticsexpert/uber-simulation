@@ -19,8 +19,12 @@ export class Engine {
   lastResult: { accepted: number; rejected: string[] } = { accepted: 0, rejected: [] };
   /** ماتچرِ داخلی (greedy). برای دموی UI روشن می‌شود؛ در مسابقهٔ واقعی خاموش و ماتچرِ بیرونی وصل می‌شود. */
   autoMatch = false;
+  /** نامِ سازندهٔ ماتچر — اجباری، هنگام ساختِ سشن ست می‌شود. */
+  creator = "";
   /** هر cycle با snapshot جدید صدا زده می‌شود (برای push روی WebSocket). */
   onSnapshot?: (snapshot: WorldSnapshot, status: SessionStatus) => void;
+  /** یک‌بار وقتی سشن به finished می‌رسد صدا زده می‌شود (برای آرشیو در دیتابیس). */
+  onFinish?: () => void;
 
   private pending: Assignment[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -67,6 +71,7 @@ export class Engine {
       this.status = "finished";
       if (this.timer) clearInterval(this.timer);
       this.timer = null;
+      this.onFinish?.(); // سشن تمام شد → آرشیوِ نتیجه در دیتابیس
     }
     this.onSnapshot?.(this.snapshot, this.status); // push به matcherهای متصل با WebSocket
   }
@@ -95,6 +100,7 @@ export class Engine {
   vizState() {
     const w = this.world;
     return {
+      creator: this.creator,
       status: this.status,
       tick: w.tick,
       minute: w.minute,

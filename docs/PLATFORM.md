@@ -38,7 +38,7 @@
 | `src/world.ts` | حالت دنیا + منطق یک step |
 | `src/engine.ts` | حلقهٔ session + بافر تخصیص + ماتچرِ داخلیِ اختیاری (`autoMatch`) |
 | `src/session-manager.ts` | مدیریت چند Engine هم‌زمان |
-| `src/server.ts` | سرور HTTP REST + سرو کردن UI |
+| `src/server.ts` | سرور HTTP REST + WebSocket (matcher) + سرو کردن UI |
 | `public/` | UI گرید + مودال |
 | `client/sample-client.ts` | Matcher مرجع (per-session) |
 
@@ -63,15 +63,26 @@
 | `POST /sessions/:id/start` | شروع/ادامه |
 | `POST /sessions/:id/reset` | ریست |
 
-### رابط Matcher (هر سشن)
+### رابط Matcher — WebSocket (پیشنهادی)
+`ws://host/sessions/:id/ws`
+
+- اتصالِ سوکت = «matcher وصل شد» → سشنِ منتظر **شروع** می‌شود.
+- سرور هر cycle، snapshot را **push** می‌کند: `{ id, status, tick, idleDrivers, openRequests, config, … }`.
+- کلاینت در پاسخ پیام می‌فرستد: `{ "tick", "assignments": [{ "driverId", "tripId" }] }`.
+- بدون polling؛ یک اتصالِ پایدار به‌جای صدها درخواست. (کلاینتِ نمونه از همین استفاده می‌کند.)
+
+### رابط Matcher — REST (جایگزین)
 | متد و مسیر | کار |
 |-----------|-----|
 | `GET /sessions/:id/state` | snapshotِ قابل‌تصمیم: `idleDrivers` + `openRequests` + `config` + `tick` |
 | `POST /sessions/:id/assign` | body: `{ "tick", "assignments": [{ "driverId", "tripId" }] }` |
 | `GET /sessions/:id/viz` | وضعیت کاملِ یک دنیا (همهٔ رانندگان + سفرها + scoreboard) |
 
+- اولین `GET /state` هم سشنِ منتظر را شروع می‌کند (مثل اتصالِ سوکت).
 - پاسخِ `/assign`: اگر `tick` قدیمی باشد → ۴۰۹.
 - `viz`/`/sessions` شاملِ `stepPerCycle` و `cycleMs` است تا UI انیمیشن را دقیق و هم‌گام پیش‌بینی کند.
+
+> کارایی: سفرهای تمام‌شده/کنسل‌شده از حافظه prune می‌شوند، پس هزینهٔ هر snapshot ثابت می‌ماند و در طول session کند نمی‌شود.
 
 ## ۵. اجرا
 

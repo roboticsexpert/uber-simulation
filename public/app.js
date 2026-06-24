@@ -3,8 +3,17 @@
 let worlds = []; // [{id, ...vizState}]
 const cardCanvas = {}; // sid → canvas
 
-document.getElementById("new-auto").onclick = () => api("/sessions", "POST", { auto: true }).then(poll);
-document.getElementById("new-empty").onclick = () => api("/sessions", "POST", { auto: false }).then(poll);
+function askName() {
+  const n = (prompt("نام سازنده (اجباری):") || "").trim();
+  if (!n) { alert("نام سازنده اجباری است."); return null; }
+  return n;
+}
+document.getElementById("new-auto").onclick = () => {
+  const name = askName(); if (name) api("/sessions", "POST", { auto: true, name }).then(poll);
+};
+document.getElementById("new-empty").onclick = () => {
+  const name = askName(); if (name) api("/sessions", "POST", { auto: false, name }).then(poll);
+};
 
 function frame() {
   for (const w of worlds) {
@@ -34,7 +43,8 @@ function syncCards() {
       el = document.createElement("div");
       el.className = "card"; el.id = "card-" + w.id;
       el.innerHTML = `<canvas></canvas><div class="card-foot">
-        <span class="cid">${w.id}</span>
+        <span class="cid"></span>
+        <span class="cmaker"></span>
         <span class="cstat"></span><span style="flex:1"></span>
         <span class="pill idle"></span></div>`;
       // کلیک → صفحهٔ جدا
@@ -43,6 +53,8 @@ function syncCards() {
       cardCanvas[w.id] = el.querySelector("canvas");
     }
     const sb = w.scoreboard;
+    el.querySelector(".cid").textContent = w.creator || "—";
+    el.querySelector(".cmaker").textContent = w.id;
     el.querySelector(".cstat").textContent = `✅${sb.completed} ❌${sb.cancelled} ⭐${sb.riderAvg.toFixed(1)}`;
     const pill = el.querySelector(".pill");
     const waiting = w.status === "idle";
