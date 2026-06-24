@@ -1,15 +1,20 @@
 /**
- * Matcher نمونه (مرجع شرکت‌کننده‌ها).
+ * Matcher نمونه (مرجع شرکت‌کننده‌ها) — نسخهٔ WebSocket.
  *
- * استراتژی: حریصانه (greedy) — هر درخواست باز را به نزدیک‌ترین رانندهٔ آزاد وصل می‌کند،
- * با اولویت‌دادن به درخواست‌هایی که بیشتر منتظر مانده‌اند (تا کنسل نشوند).
+ * به‌جای polling، یک سوکت باز می‌کند: سرور هر cycle وضعیتِ دنیا را push می‌کند،
+ * کلاینت بلافاصله تخصیص‌ها را روی همان سوکت برمی‌گرداند. (بدون درخواست‌های پشت‌سرهم.)
  *
- * اجرا:  npm run client        یا   BASE_URL=http://host:8080 tsx client/sample-client.ts
+ *   - اگر SESSION_ID داده شود، به همان دنیا وصل می‌شود.
+ *   - وگرنه با REST یک دنیای جدید می‌سازد، سپس سوکت را باز می‌کند.
+ *
+ * اجرا:  npm run client
+ *        BASE_URL=http://host:8080 SESSION_ID=brave-fox-1 npm run client
  *
  * هر شرکت‌کننده فقط تابع `decide()` را عوض می‌کند.
  */
 
 const BASE = process.env.BASE_URL ?? "http://localhost:8080";
+const WS_BASE = BASE.replace(/^http/, "ws");
 
 interface Vec2 { x: number; y: number; }
 interface State {
@@ -28,9 +33,7 @@ function decide(state: State): Assignment[] {
   const free = new Set(state.idleDrivers.map((d) => d.id));
   const byId = new Map(state.idleDrivers.map((d) => [d.id, d]));
 
-  // فوری‌ترین درخواست‌ها اول (نزدیک به کنسل‌شدن)
   const requests = [...state.openRequests].sort((a, b) => b.waitedMinutes - a.waitedMinutes);
-
   for (const req of requests) {
     let best: string | null = null;
     let bestD = Infinity;
@@ -47,36 +50,38 @@ function decide(state: State): Assignment[] {
 }
 /** -------------------------------- */
 
-const get = (p: string) => fetch(BASE + p).then((r) => r.json());
-const post = (p: string, body: unknown) =>
-  fetch(BASE + p, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  }).then((r) => r.json());
+async function main() {
+  let session = process.env.SESSION_ID ?? "";
+  if (!session) {
+    const r = await fetch(`${BASE}/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }).then((x) => x.json());
+    session = r.id;
+    console.log(`🌍 دنیای جدید ساخته شد: ${session}`);
+  }
 
-let lastTick = -1;
+  const ws = new WebSocket(`${WS_BASE}/sessions/${session}/ws`);
 
-async function loop() {
-  try {
-    const state: State = await get("/state");
+  ws.addEventListener("open", () => console.log(`🔌 سوکت به ${session} وصل شد — منتظرِ state…`));
+  ws.addEventListener("error", (e: any) => console.error("خطای سوکت:", e?.message ?? e));
+  ws.addEventListener("close", () => console.log("سوکت بسته شد."));
+
+  ws.addEventListener("message", (ev: any) => {
+    const state: State = JSON.parse(ev.data as string);
     if (state.status === "finished") {
-      console.log("🏁 session تمام شد.");
+      console.log(`🏁 session ${session} تمام شد.`);
+      ws.close();
       process.exit(0);
     }
-    if (state.status === "running" && state.tick !== lastTick) {
-      lastTick = state.tick;
-      const assignments = decide(state);
-      const res = await post("/assign", { tick: state.tick, assignments });
-      console.log(
-        `tick ${state.tick}: ${state.openRequests.length} درخواست، ${state.idleDrivers.length} راننده آزاد → ${assignments.length} تخصیص (${res.ok ? "ok" : res.message})`,
-      );
-    }
-  } catch (e) {
-    console.error("خطا در اتصال به engine:", (e as Error).message);
-  }
+    if (state.status !== "running") return;
+    const assignments = decide(state);
+    ws.send(JSON.stringify({ tick: state.tick, assignments }));
+    console.log(
+      `[${session}] tick ${state.tick}: ${state.openRequests.length} درخواست، ${state.idleDrivers.length} آزاد → ${assignments.length} تخصیص`,
+    );
+  });
 }
 
-console.log(`🤖 Matcher نمونه به ${BASE} وصل شد…`);
-setInterval(loop, 500);
-loop();
+main();

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🌍 Uber-Sim — World</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0f1419; --panel: #1a212b; --line: #2a3340; --text: #e6edf3;
+      --muted: #8b98a5; --idle: #3fb950; --ontrip: #58a6ff; --offline: #6e7681;
+      --req: #f0883e; --accent: #d29922; --dest: #f85149;
+      --font: "Vazirmatn", -apple-system, "Segoe UI", Tahoma, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); height: 100vh; display: flex; flex-direction: column; }
+    header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+    header b { font-size: 16px; font-weight: 800; }
+    .spacer { flex: 1; }
+    a.back, button { font-family: var(--font); border-radius: 7px; padding: 8px 13px; font-weight: 700; cursor: pointer; font-size: 13px; text-decoration: none; }
+    a.back { background: transparent; color: var(--text); border: 1px solid var(--line); }
+    button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+    button.danger { background: #b62324; color: #fff; border: none; }
+    main { flex: 1; display: flex; min-height: 0; }
+    #canvas { flex: 1; background: #11161c; }
+    #side { width: 250px; border-inline-start: 1px solid var(--line); padding: 16px; overflow: auto; }
+    .stat { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+    .stat:last-child { border: none; }
+    .stat b { font-variant-numeric: tabular-nums; }
+    .legend { display: flex; flex-direction: column; gap: 7px; font-size: 12px; margin-top: 14px; }
+    .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-inline-end: 7px; }
+    .actions { display: flex; gap: 8px; margin-top: 16px; }
+    .actions button { flex: 1; }
+    .pill { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+    .pill.running { background: #1f6f3f; } .pill.idle { background: #44403c; } .pill.finished { background: #1f4f8f; }
+    .pill.waiting { background: #6b4e16; color: #f3d291; }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="back" href="/">← همه دنیاها</a>
+    <b id="title">🌍 …</b>
+    <span class="pill idle" id="pill">…</span>
+    <span class="spacer"></span>
+  </header>
+  <main>
+    <canvas id="canvas"></canvas>
+    <div id="side">
+      <div class="stat"><span>cycle</span><b id="tick" dir="ltr">0 / 0</b></div>
+      <div class="stat"><span>دقیقهٔ بازی</span><b id="minute">0</b></div>
+      <div class="stat"><span>✅ تکمیل‌شده</span><b id="completed">0</b></div>
+      <div class="stat"><span>❌ کنسل‌شده</span><b id="cancelled">0</b></div>
+      <div class="stat"><span>⭐ رِیت مسافر</span><b id="riderAvg">0.00</b></div>
+      <div class="stat"><span>⭐ رِیت راننده</span><b id="driverAvg">0.00</b></div>
+      <div class="stat"><span>💰 درآمد</span><b id="revenue">0</b></div>
+      <div class="legend">
+        <div><span class="dot" style="background:var(--idle)"></span>🚕 آزاد</div>
+        <div><span class="dot" style="background:var(--accent)"></span>🚕 در راهِ مسافر</div>
+        <div><span class="dot" style="background:var(--ontrip)"></span>🚕 در حال سفر</div>
+        <div><span class="dot" style="background:var(--offline)"></span>🚕 خواب</div>
+        <div><span class="dot" style="background:var(--req)"></span>🧍 مسافر منتظر</div>
+        <div><span class="dot" style="background:var(--dest)"></span>📍 مقصد</div>
+      </div>
+      <div class="actions">
+        <button id="reset" class="ghost">↻ ریست</button>
+        <button id="delete" class="danger">🗑 حذف</button>
+      </div>
+    </div>
+  </main>
+
+  <script src="/render.js"></script>
+  <script src="/world.js"></script>
+</body>
+</html>

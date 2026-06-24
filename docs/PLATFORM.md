@@ -1,122 +1,104 @@
 # پلتفرم Matching Arena — معماری و API
 
 > سند فنی پلتفرم. قوانین بازی در [GAME_DESIGN.md](./GAME_DESIGN.md).
-> نسخه: ۰.۱
+> نسخه: ۰.۲ — multi-session
 
 ## ۱. معماری
 
 ```
-┌──────────────────────────────────────────────┐
-│                 Engine (Node + TS)            │
-│                                               │
-│  World  ──► snapshot ──► /state ──► Matcher    │
-│   ▲                                   │        │
-│   │           /assign  ◄──────────────┘        │
-│  step() هر cycle (پیش‌فرض ۳۰ ثانیه)            │
-│                                               │
-│  /viz ──► UI مرورگر (نقشهٔ زنده، فقط خواندنی)   │
-└──────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────┐
+│                 SessionManager                     │
+│   Map<sessionId, Engine>  (حداکثر ۱۶ سشن)          │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐          │
+│  │ Engine A │  │ Engine B │  │ Engine C │  ...     │
+│  │ World+loop│ │ World+loop│ │ World+loop│         │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘          │
+└───────┼─────────────┼─────────────┼────────────────┘
+  /sessions/A/...  /sessions/B/...  /sessions/C/...
+   Matcher A         Matcher B        Matcher C
+        └──────── GET /sessions ───────► UI گرید (همهٔ دنیاها)
 ```
 
+- چندین **Engine** مستقل هم‌زمان اجرا می‌شوند؛ هر کدام `World` و حلقهٔ زمانیِ خودش را دارد.
+- همهٔ سشن‌ها از یک **config یکسان** (همان `SEED` و پارامترها) استفاده می‌کنند ⇒ دنیای اولیه و تقاضای یکسان. تنها تفاوتِ نتیجه از کیفیتِ **Matcher** می‌آید — عدالتِ کامل.
+- سشن‌ها **in-memory** و گذرا هستند؛ با ری‌استارت پروسه پاک می‌شوند.
+
 سه جزء:
-- **Engine** (`src/`): هستهٔ شبیه‌سازی + سرور HTTP. تنها مرجع حقیقت دنیاست.
-- **UI** (`public/`): صفحهٔ مرورگری که هر ثانیه `/viz` را poll می‌کند و نقشه را می‌کشد. هیچ تصمیمی نمی‌گیرد.
-- **Matcher / Client** (`client/`): کد شرکت‌کننده. هر cycle `/state` می‌گیرد و `/assign` می‌فرستد.
+- **Engine** (`src/`): هستهٔ شبیه‌سازی. `SessionManager` چند نمونه را نگه می‌دارد.
+- **UI** (`public/`): گرید زندهٔ همهٔ دنیاها؛ کلیک روی هر کارت → نمای کامل (مودال).
+- **Matcher / Client** (`client/`): کد شرکت‌کننده. هر کلاینت به یک session وصل می‌شود.
 
 ## ۲. ساختار فایل‌ها
 
 | فایل | نقش |
 |------|-----|
-| `src/config.ts` | تمام پارامترهای قابل تیون (با override از طریق env) |
+| `src/config.ts` | پارامترهای قابل تیون (با override از env) |
 | `src/types.ts` | تایپ‌های مشترک |
 | `src/geometry.ts` | فاصله، حرکت، تابع رِیتینگ |
-| `src/world.ts` | حالت دنیا + منطق یک step (هستهٔ شبیه‌سازی) |
-| `src/engine.ts` | حلقهٔ session، زمان‌بندی cycle، بافر تخصیص |
+| `src/world.ts` | حالت دنیا + منطق یک step |
+| `src/engine.ts` | حلقهٔ session + بافر تخصیص + ماتچرِ داخلیِ اختیاری (`autoMatch`) |
+| `src/session-manager.ts` | مدیریت چند Engine هم‌زمان |
 | `src/server.ts` | سرور HTTP REST + سرو کردن UI |
-| `public/` | UI نقشهٔ زنده |
-| `client/sample-client.ts` | Matcher مرجع (greedy nearest) |
+| `public/` | UI گرید + مودال |
+| `client/sample-client.ts` | Matcher مرجع (per-session) |
 
-## ۳. چرخهٔ یک cycle
+## ۳. چرخهٔ یک cycle (در هر Engine)
 
-هر `CYCLE_MS` (پیش‌فرض ۳۰۰۰۰):
-1. تخصیص‌های دریافت‌شده برای snapshot جاری اعمال می‌شوند (`applyAssignments`).
-2. `world.step()` اجرا می‌شود:
-   - حرکت رانندگان `ON_TRIP` به سمت مسافر/مقصد،
-   - pickup و محاسبهٔ رِیتینگ مسافر و راننده،
-   - تکمیل سفر و محاسبهٔ کرایه،
-   - کنسل‌کردن مسافرهایی که از سقف صبر گذشته‌اند،
-   - خواب/بیداری رانندگان،
-   - تولید درخواست‌های جدید (پواسون).
+هر `CYCLE_MS`:
+1. اگر `autoMatch` روشن باشد، تخصیص‌ها را خودِ Engine (greedy) می‌سازد؛ وگرنه از تخصیص‌های دریافتیِ Matcher استفاده می‌کند.
+2. `world.step()`: حرکت، pickup، رِیتینگ، تکمیل، کنسل، خواب/بیداری، تولید درخواست.
 3. snapshot جدید منتشر می‌شود.
-4. وقتی `tick >= SESSION_TICKS` ⇒ status = `finished`.
-
-> snapshot هر tick دقیقاً برای یک cycle باز است. تخصیصی که با `tick` قدیمی POST شود رد می‌شود (پاسخ ۴۰۹).
+4. `tick >= SESSION_TICKS` ⇒ status = `finished`.
 
 ## ۴. API
 
-پایه: `http://localhost:8080` (یا `PORT`). همهٔ پاسخ‌ها JSON، با CORS باز.
+پایه: `http://localhost:8080` (یا `PORT`). JSON، CORS باز.
 
-### `GET /state` — برای Matcher
-snapshot قابل‌تصمیم‌گیری:
-```jsonc
-{
-  "status": "running",
-  "tick": 14,
-  "minute": 14,
-  "sessionTicks": 240,
-  "config": { "worldWidth": 100, "worldHeight": 100, "driverSpeed": 8,
-              "riderPatienceMinutes": 5, "baseFare": 5, "perDistanceFare": 1.5 },
-  "idleDrivers": [ { "id": "d3", "pos": { "x": 12.1, "y": 80.4 } } ],
-  "openRequests": [
-    { "id": "t42", "origin": {"x":..}, "destination": {"x":..},
-      "requestedTick": 12, "waitedMinutes": 2 }
-  ]
-}
-```
+### مدیریت سشن‌ها
+| متد و مسیر | کار |
+|-----------|-----|
+| `POST /sessions` | ساخت + شروعِ خودکار. body اختیاری `{ "auto": true }` (ماتچرِ داخلی). → `{ id, status }` |
+| `GET /sessions` | لیست همهٔ دنیاها — آرایه‌ای از vizState کامل (برای گرید UI) |
+| `DELETE /sessions/:id` | حذف سشن |
+| `POST /sessions/:id/start` | شروع/ادامه |
+| `POST /sessions/:id/reset` | ریست |
 
-### `POST /assign` — از Matcher
-```jsonc
-// body
-{ "tick": 14, "assignments": [ { "driverId": "d3", "tripId": "t42" } ] }
-// پاسخ 200: { "ok": true, "message": "1 تخصیص دریافت شد" }
-// پاسخ 409: { "ok": false, "message": "tick قدیمی است (الان 15)" }
-```
-- آخرین POST معتبر برای یک tick، کل مجموعهٔ تخصیص را تعیین می‌کند.
-- تخصیص نامعتبر (راننده مشغول، trip بسته، راننده تکراری) بی‌صدا هنگام اعمال رد می‌شود.
+### رابط Matcher (هر سشن)
+| متد و مسیر | کار |
+|-----------|-----|
+| `GET /sessions/:id/state` | snapshotِ قابل‌تصمیم: `idleDrivers` + `openRequests` + `config` + `tick` |
+| `POST /sessions/:id/assign` | body: `{ "tick", "assignments": [{ "driverId", "tripId" }] }` |
+| `GET /sessions/:id/viz` | وضعیت کاملِ یک دنیا (همهٔ رانندگان + سفرها + scoreboard) |
 
-### `GET /viz` — برای UI
-وضعیت کامل: همهٔ رانندگان (هر حالت)، سفرهای فعال، و `scoreboard` با میانگین‌ها.
-
-### کنترل session
-- `POST /session/start` — ریست + شروع.
-- `POST /session/reset` — توقف و پاک‌سازی.
+- پاسخِ `/assign`: اگر `tick` قدیمی باشد → ۴۰۹.
+- `viz`/`/sessions` شاملِ `stepPerCycle` و `cycleMs` است تا UI انیمیشن را دقیق و هم‌گام پیش‌بینی کند.
 
 ## ۵. اجرا
 
 ```bash
-npm install            # tsx + typescript (dev)
-npm run engine         # cycle واقعی ۳۰ ثانیه
-npm run engine:fast    # CYCLE_MS=1000 برای توسعه/تست
-npm run client         # Matcher نمونه
+npm install
+npm run engine         # cycle ۳۰ ثانیه (مسابقهٔ واقعی)
+npm run engine:fast    # cycle ۵ ثانیه (دمو/توسعه)
+npm run client         # یک Matcher که خودش یک دنیای جدید می‌سازد و می‌راند
 
-# نقشه: http://localhost:8080/
+# چند دنیای هم‌زمان با ماتچرِ بیرونی:
+SESSION_ID=s2 npm run client    # وصل‌شدن به دنیای موجودِ s2
+
+# UI: http://localhost:8080/  →  «دنیای جدید (auto)» یا کلاینت‌ها را وصل کن
 ```
 
-تیون با env، مثلا:
-```bash
-CYCLE_MS=500 DRIVER_SPEED=12 RIDER_ARRIVAL_RATE=3 DRIVER_COUNT=30 npm run engine
-```
+تیون با env: `CYCLE_MS`, `DRIVER_SPEED`, `RIDER_ARRIVAL_RATE`, `DRIVER_COUNT`, `SEED`, …
 
 ## ۶. عدالت و تکرارپذیری
 
-- موقعیت اولیهٔ رانندگان و توالی درخواست‌ها از یک RNG با **seed ثابت** (`SEED`) می‌آید ⇒ همهٔ شرکت‌کننده‌ها دنیای یکسان می‌بینند.
-- برای رتبه‌بندی نهایی، همه را با یک `SEED` (یا چند seed و میانگین) اجرا کنید و `scoreboard` را مقایسه کنید.
+- همهٔ سشن‌ها با `SEED` یکسان ساخته می‌شوند ⇒ موقعیت اولیهٔ رانندگان و توالیِ درخواست‌ها یکسان است.
+- برای رتبه‌بندی: هر شرکت‌کننده روی یک سشن جدا با همان seed؛ سپس `scoreboard` ها مقایسه می‌شوند.
 
 ## ۷. کارهای باقی‌مانده (Roadmap)
 
 - [ ] تیون پارامترها (سرعت، نرخ ورود، کرایه) — فعلاً placeholder.
-- [ ] فرمول نهایی امتیاز مسابقه (بخش ۶ سند بازی) و نمایش رتبه.
-- [ ] احراز هویت/شناسهٔ شرکت‌کننده تا چند Matcher هم‌زمان قابل تفکیک باشند.
-- [ ] حالت headless/batch برای اجرای سریع و خودکارِ چند seed بدون UI.
-- [ ] محدودیت زمان پاسخ Matcher در هر cycle.
-- [ ] ثبت لاگ کامل سفرها برای بازپخش (replay).
+- [ ] فرمول نهایی امتیاز مسابقه + نمایش رتبه‌بندی بینِ سشن‌ها.
+- [ ] احراز هویت/مالکیتِ سشن (الان هرکس به هر سشن دسترسی دارد).
+- [ ] پایداریِ سشن‌ها (الان in-memory و با ری‌استارت پاک می‌شوند).
+- [ ] حالت headless/batch برای اجرای خودکارِ چند seed.
+- [ ] محدودیت زمان پاسخ Matcher در هر cycle + ثبت لاگ برای replay.

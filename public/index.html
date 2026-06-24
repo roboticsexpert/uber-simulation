@@ -3,83 +3,52 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🚕 Uber-Sim — Matching Arena</title>
+  <title>🚕 Uber-Sim — Multi-World Arena</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&display=swap" rel="stylesheet" />
   <style>
     :root {
       --bg: #0f1419; --panel: #1a212b; --line: #2a3340; --text: #e6edf3;
       --muted: #8b98a5; --idle: #3fb950; --ontrip: #58a6ff; --offline: #6e7681;
-      --req: #f0883e; --accent: #d29922;
+      --req: #f0883e; --accent: #d29922; --dest: #f85149;
+      --font: "Vazirmatn", -apple-system, "Segoe UI", Tahoma, sans-serif;
     }
     * { box-sizing: border-box; }
-    body {
-      margin: 0; background: var(--bg); color: var(--text);
-      font-family: -apple-system, "Segoe UI", Tahoma, sans-serif;
-      display: flex; gap: 16px; padding: 16px; height: 100vh;
-    }
-    #sidebar { width: 300px; display: flex; flex-direction: column; gap: 14px; }
-    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
-    h1 { font-size: 18px; margin: 0 0 4px; }
-    .sub { color: var(--muted); font-size: 12px; }
-    button {
-      background: var(--accent); color: #0f1419; border: none; border-radius: 7px;
-      padding: 9px 14px; font-weight: 700; cursor: pointer; font-size: 14px; flex: 1;
-    }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); padding: 16px; }
+    header { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+    header h1 { font-size: 18px; margin: 0; font-weight: 800; }
+    header .sub { color: var(--muted); font-size: 12px; }
+    .spacer { flex: 1; }
+    button { font-family: var(--font); background: var(--accent); color: #0f1419; border: none; border-radius: 7px; padding: 9px 14px; font-weight: 700; cursor: pointer; font-size: 13px; }
     button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
-    .row { display: flex; gap: 8px; }
-    .stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
-    .stat:last-child { border: none; }
-    .stat b { font-variant-numeric: tabular-nums; }
-    .legend { display: flex; flex-direction: column; gap: 7px; font-size: 13px; }
-    .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-inline-end: 8px; }
-    #canvas-wrap { flex: 1; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; position: relative; }
-    canvas { display: block; width: 100%; height: 100%; }
-    #badge { position: absolute; top: 10px; inset-inline-start: 10px; background: #0f1419cc; padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 700; }
+
+    #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; cursor: pointer; transition: border-color .15s; }
+    .card:hover { border-color: var(--accent); }
+    .card canvas { display: block; width: 100%; height: 190px; background: #11161c; }
+    .card-foot { display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 12px; }
+    .card-foot .cid { font-weight: 800; }
+    .card-foot .cstat { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .empty { color: var(--muted); padding: 40px; text-align: center; grid-column: 1/-1; }
+
     .pill { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; }
     .pill.running { background: #1f6f3f; } .pill.idle { background: #44403c; } .pill.finished { background: #1f4f8f; }
+    .pill.waiting { background: #6b4e16; color: #f3d291; }
   </style>
 </head>
 <body>
-  <div id="sidebar">
-    <div class="card">
-      <h1>🚕 Matching Arena</h1>
-      <div class="sub">شبیه‌سازی Uber — کنترل session</div>
-      <div class="row" style="margin-top:12px">
-        <button id="start">▶ شروع</button>
-        <button id="reset" class="ghost">↻ ریست</button>
-      </div>
-    </div>
+  <header>
+    <h1>🚕 Multi-World Arena</h1>
+    <span class="sub">چندین دنیای Uber هم‌زمان</span>
+    <span class="spacer"></span>
+    <button id="new-auto">➕ دنیای جدید (auto)</button>
+    <button id="new-empty" class="ghost">➕ خالی (برای matcher بیرونی)</button>
+  </header>
 
-    <div class="card">
-      <div class="stat"><span>وضعیت</span><span class="pill idle" id="status">idle</span></div>
-      <div class="stat"><span>cycle</span><b id="tick">0 / 0</b></div>
-      <div class="stat"><span>دقیقهٔ بازی</span><b id="minute">0</b></div>
-      <div class="stat"><span>تخصیص آخر</span><b id="accepted">0</b></div>
-    </div>
+  <div id="grid"><div class="empty">هنوز دنیایی نیست. «دنیای جدید» را بزن یا با <code>npm run client</code> یک matcher وصل کن.</div></div>
 
-    <div class="card">
-      <div class="sub" style="margin-bottom:8px">📊 جدول امتیاز</div>
-      <div class="stat"><span>✅ تکمیل‌شده</span><b id="completed">0</b></div>
-      <div class="stat"><span>❌ کنسل‌شده</span><b id="cancelled">0</b></div>
-      <div class="stat"><span>⭐ رِیت مسافر</span><b id="riderAvg">0.0</b></div>
-      <div class="stat"><span>⭐ رِیت راننده</span><b id="driverAvg">0.0</b></div>
-      <div class="stat"><span>💰 درآمد</span><b id="revenue">0</b></div>
-    </div>
-
-    <div class="card legend">
-      <div><span class="dot" style="background:var(--idle)"></span>🚕 آزاد (منتظر سفر)</div>
-      <div><span class="dot" style="background:var(--accent)"></span>🚕 در راهِ رسیدن به مسافر</div>
-      <div><span class="dot" style="background:var(--ontrip)"></span>🚕 در حال سفر (مسافر سوار)</div>
-      <div><span class="dot" style="background:var(--offline)"></span>🚕 خواب (OFFLINE)</div>
-      <div><span class="dot" style="background:var(--req)"></span>🧍 مسافر منتظر</div>
-      <div><span class="dot" style="background:#f85149"></span>📍 مقصد</div>
-    </div>
-  </div>
-
-  <div id="canvas-wrap">
-    <div id="badge">در انتظار شروع…</div>
-    <canvas id="map"></canvas>
-  </div>
-
+  <script src="/render.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

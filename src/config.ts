@@ -16,7 +16,7 @@ export const config = {
 
   // ---- زمان / session ----
   /** هر cycle چند میلی‌ثانیهٔ واقعی طول می‌کشد (خواستهٔ کاربر: 30 ثانیه). */
-  cycleMs: num("CYCLE_MS", 30_000),
+  cycleMs: num("CYCLE_MS", 3_000),
   /** session چند cycle طول می‌کشد. 2 ساعت / 30 ثانیه = 240. */
   sessionTicks: num("SESSION_TICKS", 240),
   /** هر cycle معادل چند «دقیقهٔ بازی» است. */

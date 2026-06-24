@@ -17,6 +17,10 @@ export class Engine {
   status: SessionStatus = "idle";
   snapshot: WorldSnapshot = this.world.snapshot();
   lastResult: { accepted: number; rejected: string[] } = { accepted: 0, rejected: [] };
+  /** ماتچرِ داخلی (greedy). برای دموی UI روشن می‌شود؛ در مسابقهٔ واقعی خاموش و ماتچرِ بیرونی وصل می‌شود. */
+  autoMatch = false;
+  /** هر cycle با snapshot جدید صدا زده می‌شود (برای push روی WebSocket). */
+  onSnapshot?: (snapshot: WorldSnapshot, status: SessionStatus) => void;
 
   private pending: Assignment[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -54,6 +58,7 @@ export class Engine {
   }
 
   private cycle(): void {
+    if (this.autoMatch) this.pending = this.greedy();
     this.lastResult = this.world.applyAssignments(this.pending);
     this.pending = [];
     this.world.step();
@@ -63,6 +68,27 @@ export class Engine {
       if (this.timer) clearInterval(this.timer);
       this.timer = null;
     }
+    this.onSnapshot?.(this.snapshot, this.status); // push به matcherهای متصل با WebSocket
+  }
+
+  /** ماتچرِ داخلیِ greedy: هر درخواست به نزدیک‌ترین رانندهٔ آزاد (با اولویتِ منتظرترین). */
+  private greedy(): Assignment[] {
+    const { idleDrivers, openRequests } = this.snapshot;
+    const free = new Set(idleDrivers.map((d) => d.id));
+    const pos = new Map(idleDrivers.map((d) => [d.id, d.pos]));
+    const out: Assignment[] = [];
+    const reqs = [...openRequests].sort((a, b) => b.waitedMinutes - a.waitedMinutes);
+    for (const r of reqs) {
+      let best: string | null = null;
+      let bd = Infinity;
+      for (const id of free) {
+        const p = pos.get(id)!;
+        const d = Math.hypot(p.x - r.origin.x, p.y - r.origin.y);
+        if (d < bd) { bd = d; best = id; }
+      }
+      if (best) { out.push({ driverId: best, tripId: r.id }); free.delete(best); }
+    }
+    return out;
   }
 
   /** وضعیت کامل برای UI (همهٔ رانندگان + سفرهای فعال + جدول امتیاز). */

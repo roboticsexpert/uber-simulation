@@ -203,11 +203,14 @@ export class World {
         driver.state = "IDLE";
         driver.tripId = null;
         driver.lastTripTick = this.tick;
+        // سفرِ تمام‌شده دیگر فعال نیست → از Map حذف تا snapshot سبک بماند
+        this.trips.delete(trip.id);
       }
     }
   }
 
   private processCancellations(): void {
+    const cancelled: string[] = [];
     for (const trip of this.trips.values()) {
       if (trip.state !== "REQUESTED" && trip.state !== "ASSIGNED") continue;
       const waited = (this.tick - trip.requestedTick) * this.mpt;
@@ -224,7 +227,10 @@ export class World {
           driver.lastTripTick = this.tick;
         }
       }
+      cancelled.push(trip.id);
     }
+    // سفرهای کنسل‌شده دیگر فعال نیستند → حذف از Map
+    for (const id of cancelled) this.trips.delete(id);
   }
 
   private processSleepWake(): void {
