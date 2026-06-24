@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "engine",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "engine:fast"],
+      "port": 8080,
+      "autoPort": false
+    }
+  ]
+}
