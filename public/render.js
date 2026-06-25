@@ -1,4 +1,4 @@
-/* منطقِ مشترکِ رسم + انیمیشن — در هر دو صفحه (گرید و تک‌دنیا) استفاده می‌شود. */
+/* Shared drawing + animation logic — used on both pages (grid and single-world). */
 
 const CAR = { IDLE: "#3fb950", ASSIGNED: "#d29922", IN_TRANSIT: "#58a6ff", OFFLINE: "#6e7681" };
 const REQ_COLOR = "#f0883e";
@@ -6,7 +6,7 @@ const DEST_COLOR = "#f85149";
 
 const anim = {}; // `${sid}:${did}` → { fx,fy,tx,ty,start,dur }
 const heading = {};
-const lastTick = {}; // sid → آخرین tick دیده‌شده
+const lastTick = {}; // sid → last tick seen
 
 const api = (p, m = "GET", body) =>
   fetch(p, {
@@ -15,7 +15,7 @@ const api = (p, m = "GET", body) =>
     body: body ? JSON.stringify(body) : undefined,
   }).then((r) => r.json());
 
-/* ---------- درون‌یابی ---------- */
+/* ---------- interpolation ---------- */
 
 function stepToward(from, target, maxStep) {
   const dx = target.x - from.x, dy = target.y - from.y;
@@ -31,10 +31,10 @@ function worldPos(key, fallback) {
   return { x: a.fx + (a.tx - a.fx) * t, y: a.fy + (a.ty - a.fy) * t };
 }
 
-/** با تغییرِ tick یک دنیا، هدفِ انیمیشنِ هر ماشین را (عینِ منطقِ موتور) تنظیم می‌کند. */
+/** When a world's tick changes, set each car's animation target (mirroring the engine's logic). */
 function setupAnim(w) {
   if (w.tick === lastTick[w.id]) return;
-  // اولین باری که این دنیا را می‌بینیم: ماشین‌ها فوراً سرِ جای واقعی بنشینند (بدون glideِ ورودی)
+  // First time we see this world: cars snap immediately to their real positions (no entry glide)
   const firstSight = lastTick[w.id] === undefined;
   lastTick[w.id] = w.tick;
   const step = w.stepPerCycle || 8;
@@ -49,7 +49,7 @@ function setupAnim(w) {
   for (const d of w.drivers) {
     const key = w.id + ":" + d.id;
     const tg = targets[d.id];
-    // در اولین مشاهده، هدف = همان موقعیت فعلی → ماشین ثابت و کامل ظاهر می‌شود
+    // On first sight, target = current position → the car appears static and fully placed
     const pred = firstSight
       ? { x: d.pos.x, y: d.pos.y }
       : d.state === "ON_TRIP" && tg ? stepToward(d.pos, tg, step) : { x: d.pos.x, y: d.pos.y };
@@ -58,7 +58,7 @@ function setupAnim(w) {
   }
 }
 
-/* ---------- اشکال ---------- */
+/* ---------- shapes ---------- */
 
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -104,7 +104,7 @@ function route(ctx, a, b, color, alpha) {
   ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); ctx.restore();
 }
 
-/* ---------- رسمِ یک دنیا روی یک canvas ---------- */
+/* ---------- drawing one world onto a canvas ---------- */
 
 function drawWorld(ctx, W, H, w, iconScale) {
   const cv = ctx.canvas;

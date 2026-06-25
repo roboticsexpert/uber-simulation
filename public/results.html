@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🏆 Uber-Sim — نتایج</title>
+  <title>🏆 Uber-Sim — Results</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&display=swap" rel="stylesheet" />
@@ -41,10 +41,10 @@
 </head>
 <body>
   <header>
-    <h1>🏆 جدولِ نتایج</h1>
-    <span class="sub">سشن‌های تمام‌شده — مرتب بر اساس درآمد</span>
+    <h1>🏆 Leaderboard</h1>
+    <span class="sub">Finished sessions — sorted by revenue</span>
     <span class="spacer"></span>
-    <a class="back" href="/">← همه دنیاها</a>
+    <a class="back" href="/">← All worlds</a>
   </header>
 
   <div class="wrap">
@@ -52,18 +52,18 @@
       <thead>
         <tr>
           <th class="num">#</th>
-          <th>سازنده</th>
-          <th class="num">💰 درآمد</th>
-          <th class="num">✅ تکمیل</th>
-          <th class="num">❌ کنسل</th>
-          <th class="num">⭐ مسافر</th>
-          <th class="num">⭐ راننده</th>
+          <th>Creator</th>
+          <th class="num">💰 Revenue</th>
+          <th class="num">✅ Completed</th>
+          <th class="num">❌ Cancelled</th>
+          <th class="num">⭐ Rider</th>
+          <th class="num">⭐ Driver</th>
           <th class="num">cycle</th>
-          <th>زمان</th>
+          <th>Time</th>
         </tr>
       </thead>
       <tbody id="rows">
-        <tr><td colspan="9" class="empty">در حال بارگذاری…</td></tr>
+        <tr><td colspan="9" class="empty">Loading…</td></tr>
       </tbody>
     </table>
   </div>

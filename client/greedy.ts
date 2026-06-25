@@ -1,16 +1,17 @@
 /**
- * Matcher نمونه (مرجع شرکت‌کننده‌ها) — نسخهٔ WebSocket.
+ * Sample matcher (reference for participants) — WebSocket version.
  *
- * به‌جای polling، یک سوکت باز می‌کند: سرور هر cycle وضعیتِ دنیا را push می‌کند،
- * کلاینت بلافاصله تخصیص‌ها را روی همان سوکت برمی‌گرداند. (بدون درخواست‌های پشت‌سرهم.)
+ * Instead of polling, it opens a socket: the server pushes the world state each
+ * cycle, and the client immediately returns the assignments over the same
+ * socket. (No back-to-back requests.)
  *
- *   - اگر SESSION_ID داده شود، به همان دنیا وصل می‌شود.
- *   - وگرنه با REST یک دنیای جدید می‌سازد، سپس سوکت را باز می‌کند.
+ *   - If SESSION_ID is provided, it connects to that same world.
+ *   - Otherwise it creates a new world via REST, then opens the socket.
  *
- * اجرا:  npm run client
- *        BASE_URL=http://host:8080 SESSION_ID=brave-fox-1 npm run client
+ * Run:  npm run client
+ *       BASE_URL=http://host:8080 SESSION_ID=brave-fox-1 npm run client
  *
- * هر شرکت‌کننده فقط تابع `decide()` را عوض می‌کند.
+ * Each participant only changes the `decide()` function.
  */
 
 const BASE = process.env.BASE_URL ?? "http://localhost:8080";
@@ -27,7 +28,7 @@ interface Assignment { driverId: string; tripId: string; }
 
 const dist = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y);
 
-/** ----- منطق اصلی شرکت‌کننده ----- */
+/** ----- Core participant logic ----- */
 function decide(state: State): Assignment[] {
   const assignments: Assignment[] = [];
   const free = new Set(state.idleDrivers.map((d) => d.id));
@@ -53,9 +54,9 @@ function decide(state: State): Assignment[] {
 async function main() {
   let session = process.env.SESSION_ID ?? "";
   if (!session) {
-    const name = (process.env.MATCHER_NAME ?? "").trim();
+    const name = (process.env.MATCHER_NAME ?? "Greedy").trim();
     if (!name) {
-      console.error('❌ MATCHER_NAME اجباری است. مثال:  MATCHER_NAME="تیم آلفا" npm run client');
+      console.error('❌ MATCHER_NAME is required. Example:  MATCHER_NAME="Team Alpha" npm run client');
       process.exit(1);
     }
     const r = await fetch(`${BASE}/sessions`, {
@@ -64,19 +65,19 @@ async function main() {
       body: JSON.stringify({ name }),
     }).then((x) => x.json());
     session = r.id;
-    console.log(`🌍 دنیای جدید ساخته شد: ${session} (سازنده: ${name})`);
+    console.log(`🌍 New world created: ${session} (creator: ${name})`);
   }
 
   const ws = new WebSocket(`${WS_BASE}/sessions/${session}/ws`);
 
-  ws.addEventListener("open", () => console.log(`🔌 سوکت به ${session} وصل شد — منتظرِ state…`));
-  ws.addEventListener("error", (e: any) => console.error("خطای سوکت:", e?.message ?? e));
-  ws.addEventListener("close", () => console.log("سوکت بسته شد."));
+  ws.addEventListener("open", () => console.log(`🔌 Socket connected to ${session} — waiting for state…`));
+  ws.addEventListener("error", (e: any) => console.error("Socket error:", e?.message ?? e));
+  ws.addEventListener("close", () => console.log("Socket closed."));
 
   ws.addEventListener("message", (ev: any) => {
     const state: State = JSON.parse(ev.data as string);
     if (state.status === "finished") {
-      console.log(`🏁 session ${session} تمام شد.`);
+      console.log(`🏁 session ${session} finished.`);
       ws.close();
       process.exit(0);
     }
@@ -84,7 +85,7 @@ async function main() {
     const assignments = decide(state);
     ws.send(JSON.stringify({ tick: state.tick, assignments }));
     console.log(
-      `[${session}] tick ${state.tick}: ${state.openRequests.length} درخواست، ${state.idleDrivers.length} آزاد → ${assignments.length} تخصیص`,
+      `[${session}] tick ${state.tick}: ${state.openRequests.length} requests, ${state.idleDrivers.length} idle → ${assignments.length} assigned`,
     );
   });
 }

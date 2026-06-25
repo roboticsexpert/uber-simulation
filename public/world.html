@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -24,9 +24,9 @@
     button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
     button.danger { background: #b62324; color: #fff; border: none; }
     main { flex: 1; display: flex; min-height: 0; }
-    /* min-width/height: 0 تا اندازهٔ بک‌استورِ canvas به layout بازخورد ندهد (جلوگیری از رشدِ آرامِ عرض) */
+    /* min-width/height: 0 so the canvas backing store size doesn't feed back into layout (prevents slow width creep) */
     #canvas { flex: 1; min-width: 0; min-height: 0; display: block; background: #11161c; }
-    #side { width: 250px; border-inline-start: 1px solid var(--line); padding: 16px; overflow: auto; }
+    #side { width: 250px; border-inline-end: 1px solid var(--line); padding: 16px; overflow: auto; }
     .stat { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
     .stat:last-child { border: none; }
     .stat b { font-variant-numeric: tabular-nums; }
@@ -41,7 +41,7 @@
 </head>
 <body>
   <header>
-    <a class="back" href="/">← همه دنیاها</a>
+    <a class="back" href="/">← All worlds</a>
     <b id="title">🌍 …</b>
     <span class="pill idle" id="pill">…</span>
     <span class="spacer"></span>
@@ -49,25 +49,25 @@
   <main>
     <canvas id="canvas"></canvas>
     <div id="side">
-      <div class="stat"><span>👤 سازنده</span><b id="creator">—</b></div>
+      <div class="stat"><span>👤 Creator</span><b id="creator">—</b></div>
       <div class="stat"><span>cycle</span><b id="tick" dir="ltr">0 / 0</b></div>
-      <div class="stat"><span>دقیقهٔ بازی</span><b id="minute">0</b></div>
-      <div class="stat"><span>✅ تکمیل‌شده</span><b id="completed">0</b></div>
-      <div class="stat"><span>❌ کنسل‌شده</span><b id="cancelled">0</b></div>
-      <div class="stat"><span>⭐ رِیت مسافر</span><b id="riderAvg">0.00</b></div>
-      <div class="stat"><span>⭐ رِیت راننده</span><b id="driverAvg">0.00</b></div>
-      <div class="stat"><span>💰 درآمد</span><b id="revenue">0</b></div>
+      <div class="stat"><span>Game minute</span><b id="minute">0</b></div>
+      <div class="stat"><span>✅ Completed</span><b id="completed">0</b></div>
+      <div class="stat"><span>❌ Cancelled</span><b id="cancelled">0</b></div>
+      <div class="stat"><span>⭐ Rider rating</span><b id="riderAvg">0.00</b></div>
+      <div class="stat"><span>⭐ Driver rating</span><b id="driverAvg">0.00</b></div>
+      <div class="stat"><span>💰 Revenue</span><b id="revenue">0</b></div>
       <div class="legend">
-        <div><span class="dot" style="background:var(--idle)"></span>🚕 آزاد</div>
-        <div><span class="dot" style="background:var(--accent)"></span>🚕 در راهِ مسافر</div>
-        <div><span class="dot" style="background:var(--ontrip)"></span>🚕 در حال سفر</div>
-        <div><span class="dot" style="background:var(--offline)"></span>🚕 خواب</div>
-        <div><span class="dot" style="background:var(--req)"></span>🧍 مسافر منتظر</div>
-        <div><span class="dot" style="background:var(--dest)"></span>📍 مقصد</div>
+        <div><span class="dot" style="background:var(--idle)"></span>🚕 Idle</div>
+        <div><span class="dot" style="background:var(--accent)"></span>🚕 En route to rider</div>
+        <div><span class="dot" style="background:var(--ontrip)"></span>🚕 On trip</div>
+        <div><span class="dot" style="background:var(--offline)"></span>🚕 Asleep</div>
+        <div><span class="dot" style="background:var(--req)"></span>🧍 Waiting rider</div>
+        <div><span class="dot" style="background:var(--dest)"></span>📍 Destination</div>
       </div>
       <div class="actions">
-        <button id="reset" class="ghost">↻ ریست</button>
-        <button id="delete" class="danger">🗑 حذف</button>
+        <button id="reset" class="ghost">↻ Reset</button>
+        <button id="delete" class="danger">🗑 Delete</button>
       </div>
     </div>
   </main>

@@ -1,9 +1,9 @@
-/* صفحهٔ گرید: همهٔ دنیاها به‌صورت mini-map؛ کلیک روی هر کارت → صفحهٔ جدا. */
+/* Grid page: all worlds shown as mini-maps; click a card → its own page. */
 
 let worlds = []; // [{id, ...vizState}]
 const cardCanvas = {}; // sid → canvas
 
-// سشن‌ها فقط با کد (matcherِ بیرونی) ساخته می‌شوند؛ این صفحه فقط نمایش‌دهنده است.
+// Sessions are created only via code (an external matcher); this page is display-only.
 
 function frame() {
   for (const w of worlds) {
@@ -14,10 +14,23 @@ function frame() {
 }
 requestAnimationFrame(frame);
 
+// Active (running) sessions first, then waiting/idle, then finished.
+const STATUS_RANK = { running: 0, idle: 1, finished: 2 };
+function sortedWorlds() {
+  return worlds.slice().sort((a, b) => {
+    const ra = STATUS_RANK[a.status] ?? 1, rb = STATUS_RANK[b.status] ?? 1;
+    if (ra !== rb) return ra - rb;
+    return (b.scoreboard?.completed || 0) - (a.scoreboard?.completed || 0); // busier first
+  });
+}
+
 function syncCards() {
   const grid = document.getElementById("grid");
   const empty = grid.querySelector(".empty");
   if (empty && worlds.length) empty.remove();
+
+  const title = document.getElementById("worlds-title");
+  if (title) title.style.display = worlds.length ? "" : "none";
 
   const ids = new Set(worlds.map((w) => w.id));
   for (const id of Object.keys(cardCanvas)) {
@@ -27,7 +40,7 @@ function syncCards() {
       delete cardCanvas[id];
     }
   }
-  for (const w of worlds) {
+  for (const w of sortedWorlds()) {
     let el = document.getElementById("card-" + w.id);
     if (!el) {
       el = document.createElement("div");
@@ -37,7 +50,7 @@ function syncCards() {
         <span class="cmaker"></span>
         <span class="cstat"></span><span style="flex:1"></span>
         <span class="pill idle"></span></div>`;
-      // کلیک → صفحهٔ جدا
+      // click → its own page
       el.onclick = () => { window.location.href = "/world.html?id=" + encodeURIComponent(w.id); };
       grid.appendChild(el);
       cardCanvas[w.id] = el.querySelector("canvas");
@@ -48,11 +61,12 @@ function syncCards() {
     el.querySelector(".cstat").textContent = `✅${sb.completed} ❌${sb.cancelled} ⭐${sb.riderAvg.toFixed(1)}`;
     const pill = el.querySelector(".pill");
     const waiting = w.status === "idle";
-    pill.textContent = waiting ? "منتظر matcher" : w.status;
+    pill.textContent = waiting ? "waiting for matcher" : w.status;
     pill.className = "pill " + (waiting ? "waiting" : w.status);
+    grid.appendChild(el); // re-append in sorted order (active first)
   }
   if (worlds.length === 0 && !grid.querySelector(".empty")) {
-    grid.innerHTML = `<div class="empty">هنوز دنیایی نیست. سشن‌ها با کد ساخته می‌شوند — با <code>npm run client</code> یک matcher وصل کن.</div>`;
+    grid.innerHTML = `<div class="empty">No worlds yet. Sessions are created from code — run a sample client (Node.js or Python) to connect a matcher.</div>`;
   }
 }
 
@@ -62,7 +76,7 @@ async function poll() {
     worlds = r.sessions || [];
     for (const w of worlds) setupAnim(w);
     syncCards();
-  } catch (e) { /* engine بالا نیست */ }
+  } catch (e) { /* engine is not up */ }
 }
 
 setInterval(poll, 200);

@@ -1,4 +1,4 @@
-/* صفحهٔ تک‌دنیا: یک session را تمام‌صفحه نشان می‌دهد. id از کوئریِ ?id=... */
+/* Single-world page: shows one session full-screen. id comes from the ?id=... query. */
 
 const ID = new URLSearchParams(location.search).get("id");
 let world = null;
@@ -24,7 +24,7 @@ function updatePanel() {
   if (!world) return;
   const pill = document.getElementById("pill");
   const waiting = world.status === "idle";
-  pill.textContent = waiting ? "منتظر matcher" : world.status;
+  pill.textContent = waiting ? "waiting for matcher" : world.status;
   pill.className = "pill " + (waiting ? "waiting" : world.status);
   const sb = world.scoreboard;
   setText("creator", world.creator || "—");
@@ -42,11 +42,11 @@ async function poll() {
   if (!ID) return;
   try {
     const w = await api(`/sessions/${ID}/viz`);
-    if (w.error) { document.getElementById("title").textContent = "🌍 " + ID + " — یافت نشد"; world = null; return; }
+    if (w.error) { document.getElementById("title").textContent = "🌍 " + ID + " — not found"; world = null; return; }
     world = w;
     setupAnim(world);
     updatePanel();
-  } catch (e) { /* engine بالا نیست */ }
+  } catch (e) { /* engine is not up */ }
 }
 
 setInterval(poll, 200);

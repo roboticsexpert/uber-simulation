@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -33,21 +33,132 @@
     .card-foot .cmaker { color: var(--muted); font-size: 11px; }
     .card-foot .cstat { color: var(--muted); font-variant-numeric: tabular-nums; }
     .empty { color: var(--muted); padding: 40px; text-align: center; grid-column: 1/-1; }
+    .section-title { font-size: 15px; font-weight: 800; margin: 4px 0 12px; }
 
     .pill { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; }
     .pill.running { background: #1f6f3f; } .pill.idle { background: #44403c; } .pill.finished { background: #1f4f8f; }
     .pill.waiting { background: #6b4e16; color: #f3d291; }
+
+    /* Intro / guide */
+    .intro { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px; margin-bottom: 18px; line-height: 1.9; }
+    .intro h2 { margin: 0 0 8px; font-size: 17px; font-weight: 800; }
+    .intro p { margin: 0 0 12px; color: var(--text); font-size: 14px; }
+    .intro .lead { color: var(--muted); }
+    .intro b { color: var(--accent); }
+    .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 4px 0 16px; }
+    .step { background: #11161c; border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; }
+    .step .n { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #0f1419; font-weight: 800; font-size: 12px; margin-right: 8px; }
+    .step .t { font-weight: 700; font-size: 13px; }
+    .step .d { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    .intro code, .intro pre { font-family: "SF Mono", Menlo, Consolas, monospace; direction: ltr; unicode-bidi: bidi-override; }
+    .intro code { background: #11161c; border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; font-size: 12px; }
+    .intro pre { background: #11161c; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font-size: 12.5px; text-align: left; margin: 0; }
+    .cta { display: inline-flex; align-items: center; gap: 8px; background: var(--accent); color: #0f1419; border-radius: 8px; padding: 10px 16px; font-weight: 800; font-size: 13.5px; text-decoration: none; }
+    .cta:hover { filter: brightness(1.08); }
+    .gh-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+    .gh-row .repo { color: var(--muted); font-size: 12.5px; direction: ltr; }
+    .clients { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+    .client-head { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+    .client-head .hint { color: var(--muted); font-weight: 400; font-size: 12px; }
+    .rules { display: grid; gap: 8px; margin: 4px 0 14px; }
+    .rule { display: grid; grid-template-columns: 150px 1fr; gap: 12px; background: #11161c; border: 1px solid var(--line); border-radius: 9px; padding: 10px 14px; font-size: 13px; }
+    .rule .k { font-weight: 700; }
+    .rule .v { color: var(--muted); }
+    .rule .v b, .intro a { color: var(--text); }
+    .score-callout { background: #11161c; border: 1px solid var(--accent); border-radius: 9px; padding: 12px 14px; margin: 0 0 14px; font-size: 13.5px; }
+    .score-callout b { color: var(--accent); }
+    table.rate { border-collapse: collapse; font-size: 12.5px; margin: 2px 0 4px; }
+    table.rate th, table.rate td { border: 1px solid var(--line); padding: 5px 12px; text-align: left; }
+    table.rate th { background: #11161c; font-weight: 700; }
+    table.rate td.stars { color: var(--accent); white-space: nowrap; }
+    @media (max-width: 560px) { .rule { grid-template-columns: 1fr; gap: 2px; } }
   </style>
 </head>
 <body>
   <header>
     <h1>🚕 Multi-World Arena</h1>
-    <span class="sub">چندین دنیای Uber هم‌زمان</span>
+    <span class="sub">Multiple Uber worlds running at once</span>
     <span class="spacer"></span>
-    <a class="navlink" href="/results.html">🏆 نتایج</a>
+    <a class="navlink" href="/results.html">🏆 Results</a>
   </header>
 
-  <div id="grid"><div class="empty">هنوز دنیایی نیست. سشن‌ها با کد ساخته می‌شوند — با <code>npm run client</code> یک matcher وصل کن.</div></div>
+  <h2 class="section-title" id="worlds-title" style="display:none">🟢 Live worlds</h2>
+  <div id="grid"><div class="empty">No worlds yet. Sessions are created from code — run a sample client (Node.js or Python) to connect a matcher.</div></div>
+
+  <section class="intro">
+    <h2>🚕 What's the story?</h2>
+    <p class="lead">
+      This is a <b>coding competition</b>. Each participant writes their own <b>Matching</b> algorithm —
+      that is, a function that, in a live Uber simulation, decides which <b>driver</b> is assigned to which <b>rider</b>.
+    </p>
+    <p>
+      The game engine simulates a real world: drivers move, riders make requests,
+      and fares, ratings, and driver fatigue are all computed. The smarter your matcher,
+      the more trips get completed and the higher your score. You can watch each world's live map and
+      scoreboard at the top of this page.
+    </p>
+
+    <h2>📋 Rules &amp; scoring</h2>
+    <div class="score-callout">
+      🏆 Your score is your total <b>revenue</b> — the sum of fares from every <b>completed</b> trip.
+      The <a href="/results.html">Results</a> board ranks matchers by revenue, highest first.
+      Complete more (and longer) trips and avoid cancellations.
+    </div>
+    <div class="rules">
+      <div class="rule"><span class="k">💵 Trip fare</span><span class="v"><code>fare = 5 + 1.5 × trip distance</code> — added to your revenue on each completed trip (distance from origin to destination, not the pickup drive).</span></div>
+      <div class="rule"><span class="k">❌ Cancellation</span><span class="v">A rider waits at most <b>5 minutes</b> from request to pickup. Miss that window — or never assign a driver — and the trip cancels for <b>zero</b> revenue.</span></div>
+      <div class="rule"><span class="k">⭐ Rider rating</span><span class="v">Stars from the wait between <b>request → pickup</b>. Match fast to score high.</span></div>
+      <div class="rule"><span class="k">⭐ Driver rating</span><span class="v">Stars from the time between <b>assignment → pickup</b>. Pick the nearest free driver.</span></div>
+      <div class="rule"><span class="k">😴 Drivers</span><span class="v">Accept every trip, one at a time. After <b>30 min</b> with no trip they go offline (sleep), and wake up <b>60 min</b> later.</span></div>
+    </div>
+    <p style="margin:0 0 6px; font-size:13px">Both ratings use the same scale (minutes of wait):</p>
+    <table class="rate">
+      <thead><tr><th>Wait time</th><th>Rating</th></tr></thead>
+      <tbody>
+        <tr><td>under 1 min</td><td class="stars">⭐⭐⭐⭐⭐</td></tr>
+        <tr><td>1–2 min</td><td class="stars">⭐⭐⭐⭐</td></tr>
+        <tr><td>2–3 min</td><td class="stars">⭐⭐⭐</td></tr>
+        <tr><td>3–4 min</td><td class="stars">⭐⭐</td></tr>
+        <tr><td>over 4 min</td><td class="stars">⭐</td></tr>
+      </tbody>
+    </table>
+
+    <h2>🎮 How do I play?</h2>
+    <div class="steps">
+      <div class="step"><div class="t"><span class="n">1</span>Get the sample code</div><div class="d">Clone or download the repository from GitHub.</div></div>
+      <div class="step"><div class="t"><span class="n">2</span>Pick a language</div><div class="d">A ready-to-run sample client is included for both <b>Node.js</b> and <b>Python</b>.</div></div>
+      <div class="step"><div class="t"><span class="n">3</span>Write your algorithm</div><div class="d">Change only the <code>decide()</code> function and run it — your world shows up on this page.</div></div>
+    </div>
+
+    <p style="margin-bottom:6px">First, get the code:</p>
+    <pre>git clone https://github.com/Real-World-Games/UberSimulation
+cd UberSimulation</pre>
+
+    <p style="margin:14px 0 6px">Then run <b>one</b> of the sample clients (each connects to this arena):</p>
+    <div class="clients">
+      <div>
+        <div class="client-head">🟢 Node.js <span class="hint">(Node 22+)</span></div>
+        <pre>cd client/node-client
+npm install
+MATCHER_NAME="Team Alpha" npm start</pre>
+      </div>
+      <div>
+        <div class="client-head">🐍 Python <span class="hint">(Python 3.10+)</span></div>
+        <pre>cd client/python-client
+pip install -r requirements.txt
+MATCHER_NAME="Team Alpha" python sample_client.py</pre>
+      </div>
+    </div>
+    <p class="lead" style="margin:12px 0 0; font-size:13px">
+      On start, the client prints a link to your live world — and your map appears in the arena at the top of this page.
+      Then open the sample client and change the <code>decide()</code> function to write your own matching strategy.
+    </p>
+
+    <div class="gh-row" style="margin-top:16px">
+      <a class="cta" href="https://github.com/Real-World-Games/UberSimulation" target="_blank" rel="noopener">⬇️ Get the sample code from GitHub</a>
+      <span class="repo">github.com/Real-World-Games/UberSimulation</span>
+    </div>
+  </section>
 
   <script src="/render.js"></script>
   <script src="/app.js"></script>

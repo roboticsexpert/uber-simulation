@@ -1,14 +1,14 @@
-# پلتفرم Matching Arena — معماری و API
+# Matching Arena Platform — Architecture and API
 
-> سند فنی پلتفرم. قوانین بازی در [GAME_DESIGN.md](./GAME_DESIGN.md).
-> نسخه: ۰.۲ — multi-session
+> Technical platform document. Game rules in [GAME_DESIGN.md](./GAME_DESIGN.md).
+> Version: 0.2 — multi-session
 
-## ۱. معماری
+## 1. Architecture
 
 ```
 ┌───────────────────────────────────────────────────┐
 │                 SessionManager                     │
-│   Map<sessionId, Engine>  (حداکثر ۱۶ سشن)          │
+│   Map<sessionId, Engine>  (up to 16 sessions)      │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐          │
 │  │ Engine A │  │ Engine B │  │ Engine C │  ...     │
 │  │ World+loop│ │ World+loop│ │ World+loop│         │
@@ -16,100 +16,100 @@
 └───────┼─────────────┼─────────────┼────────────────┘
   /sessions/A/...  /sessions/B/...  /sessions/C/...
    Matcher A         Matcher B        Matcher C
-        └──────── GET /sessions ───────► UI گرید (همهٔ دنیاها)
+        └──────── GET /sessions ───────► UI grid (all worlds)
 ```
 
-- چندین **Engine** مستقل هم‌زمان اجرا می‌شوند؛ هر کدام `World` و حلقهٔ زمانیِ خودش را دارد.
-- همهٔ سشن‌ها از یک **config یکسان** (همان `SEED` و پارامترها) استفاده می‌کنند ⇒ دنیای اولیه و تقاضای یکسان. تنها تفاوتِ نتیجه از کیفیتِ **Matcher** می‌آید — عدالتِ کامل.
-- سشن‌ها **in-memory** و گذرا هستند؛ با ری‌استارت پروسه پاک می‌شوند.
+- Several independent **Engine**s run concurrently; each has its own `World` and time loop.
+- All sessions use the **same config** (same `SEED` and parameters) ⇒ identical initial world and demand. The only difference in outcome comes from the quality of the **Matcher** — perfect fairness.
+- Sessions are **in-memory** and transient; they are wiped when the process restarts.
 
-سه جزء:
-- **Engine** (`src/`): هستهٔ شبیه‌سازی. `SessionManager` چند نمونه را نگه می‌دارد.
-- **UI** (`public/`): گرید زندهٔ همهٔ دنیاها؛ کلیک روی هر کارت → نمای کامل (مودال).
-- **Matcher / Client** (`client/`): کد شرکت‌کننده. هر کلاینت به یک session وصل می‌شود.
+Three components:
+- **Engine** (`src/`): the simulation core. `SessionManager` holds multiple instances.
+- **UI** (`public/`): a live grid of all worlds; click a card → full view (modal).
+- **Matcher / Client** (`client/`): participant code. Each client connects to one session.
 
-## ۲. ساختار فایل‌ها
+## 2. File Structure
 
-| فایل | نقش |
+| File | Role |
 |------|-----|
-| `src/config.ts` | پارامترهای قابل تیون (با override از env) |
-| `src/types.ts` | تایپ‌های مشترک |
-| `src/geometry.ts` | فاصله، حرکت، تابع رِیتینگ |
-| `src/world.ts` | حالت دنیا + منطق یک step |
-| `src/engine.ts` | حلقهٔ session + بافر تخصیص + ماتچرِ داخلیِ اختیاری (`autoMatch`) |
-| `src/session-manager.ts` | مدیریت چند Engine هم‌زمان |
-| `src/server.ts` | سرور HTTP REST + WebSocket (matcher) + سرو کردن UI |
-| `public/` | UI گرید + مودال |
-| `client/sample-client.ts` | Matcher مرجع (per-session) |
+| `src/config.ts` | Tunable parameters (with env overrides) |
+| `src/types.ts` | Shared types |
+| `src/geometry.ts` | Distance, movement, rating function |
+| `src/world.ts` | World state + single-step logic |
+| `src/engine.ts` | Session loop + assignment buffer + optional internal matcher (`autoMatch`) |
+| `src/session-manager.ts` | Management of multiple concurrent Engines |
+| `src/server.ts` | HTTP REST server + WebSocket (matcher) + serving the UI |
+| `public/` | UI grid + modal |
+| `client/sample-client.ts` | Reference Matcher (per-session) |
 
-## ۳. چرخهٔ یک cycle (در هر Engine)
+## 3. The cycle (in each Engine)
 
-هر `CYCLE_MS`:
-1. اگر `autoMatch` روشن باشد، تخصیص‌ها را خودِ Engine (greedy) می‌سازد؛ وگرنه از تخصیص‌های دریافتیِ Matcher استفاده می‌کند.
-2. `world.step()`: حرکت، pickup، رِیتینگ، تکمیل، کنسل، خواب/بیداری، تولید درخواست.
-3. snapshot جدید منتشر می‌شود.
+Every `CYCLE_MS`:
+1. If `autoMatch` is on, the Engine builds the assignments itself (greedy); otherwise it uses the assignments received from the Matcher.
+2. `world.step()`: movement, pickup, rating, completion, cancellation, sleep/wake, request generation.
+3. A new snapshot is published.
 4. `tick >= SESSION_TICKS` ⇒ status = `finished`.
 
-## ۴. API
+## 4. API
 
-پایه: `http://localhost:8080` (یا `PORT`). JSON، CORS باز.
+Base: `http://localhost:8080` (or `PORT`). JSON, open CORS.
 
-### مدیریت سشن‌ها
-| متد و مسیر | کار |
+### Session Management
+| Method and path | Action |
 |-----------|-----|
-| `POST /sessions` | ساخت + شروعِ خودکار. body اختیاری `{ "auto": true }` (ماتچرِ داخلی). → `{ id, status }` |
-| `GET /sessions` | لیست همهٔ دنیاها — آرایه‌ای از vizState کامل (برای گرید UI) |
-| `DELETE /sessions/:id` | حذف سشن |
-| `POST /sessions/:id/start` | شروع/ادامه |
-| `POST /sessions/:id/reset` | ریست |
+| `POST /sessions` | Create + auto-start. Optional body `{ "auto": true }` (internal matcher). → `{ id, status }` |
+| `GET /sessions` | List of all worlds — an array of full vizState (for the UI grid) |
+| `DELETE /sessions/:id` | Delete a session |
+| `POST /sessions/:id/start` | Start/resume |
+| `POST /sessions/:id/reset` | Reset |
 
-### رابط Matcher — WebSocket (پیشنهادی)
+### Matcher Interface — WebSocket (recommended)
 `ws://host/sessions/:id/ws`
 
-- اتصالِ سوکت = «matcher وصل شد» → سشنِ منتظر **شروع** می‌شود.
-- سرور هر cycle، snapshot را **push** می‌کند: `{ id, status, tick, idleDrivers, openRequests, config, … }`.
-- کلاینت در پاسخ پیام می‌فرستد: `{ "tick", "assignments": [{ "driverId", "tripId" }] }`.
-- بدون polling؛ یک اتصالِ پایدار به‌جای صدها درخواست. (کلاینتِ نمونه از همین استفاده می‌کند.)
+- Opening the socket = "matcher connected" → a waiting session **starts**.
+- Every cycle, the server **pushes** a snapshot: `{ id, status, tick, idleDrivers, openRequests, config, … }`.
+- The client replies with a message: `{ "tick", "assignments": [{ "driverId", "tripId" }] }`.
+- No polling; one persistent connection instead of hundreds of requests. (The sample client uses exactly this.)
 
-### رابط Matcher — REST (جایگزین)
-| متد و مسیر | کار |
+### Matcher Interface — REST (alternative)
+| Method and path | Action |
 |-----------|-----|
-| `GET /sessions/:id/state` | snapshotِ قابل‌تصمیم: `idleDrivers` + `openRequests` + `config` + `tick` |
+| `GET /sessions/:id/state` | Decision-ready snapshot: `idleDrivers` + `openRequests` + `config` + `tick` |
 | `POST /sessions/:id/assign` | body: `{ "tick", "assignments": [{ "driverId", "tripId" }] }` |
-| `GET /sessions/:id/viz` | وضعیت کاملِ یک دنیا (همهٔ رانندگان + سفرها + scoreboard) |
+| `GET /sessions/:id/viz` | Full state of one world (all drivers + trips + scoreboard) |
 
-- اولین `GET /state` هم سشنِ منتظر را شروع می‌کند (مثل اتصالِ سوکت).
-- پاسخِ `/assign`: اگر `tick` قدیمی باشد → ۴۰۹.
-- `viz`/`/sessions` شاملِ `stepPerCycle` و `cycleMs` است تا UI انیمیشن را دقیق و هم‌گام پیش‌بینی کند.
+- The first `GET /state` also starts a waiting session (like opening the socket).
+- Response of `/assign`: if `tick` is stale → 409.
+- `viz`/`/sessions` include `stepPerCycle` and `cycleMs` so the UI can predict the animation accurately and in sync.
 
-> کارایی: سفرهای تمام‌شده/کنسل‌شده از حافظه prune می‌شوند، پس هزینهٔ هر snapshot ثابت می‌ماند و در طول session کند نمی‌شود.
+> Performance: completed/cancelled trips are pruned from memory, so the cost of each snapshot stays constant and does not slow down over the course of a session.
 
-## ۵. اجرا
+## 5. Running
 
 ```bash
 npm install
-npm run engine         # cycle ۳۰ ثانیه (مسابقهٔ واقعی)
-npm run engine:fast    # cycle ۵ ثانیه (دمو/توسعه)
-npm run client         # یک Matcher که خودش یک دنیای جدید می‌سازد و می‌راند
+npm run engine         # 30-second cycle (real competition)
+npm run engine:fast    # 5-second cycle (demo/development)
+npm run client         # one Matcher that creates and drives a new world itself
 
-# چند دنیای هم‌زمان با ماتچرِ بیرونی:
-SESSION_ID=s2 npm run client    # وصل‌شدن به دنیای موجودِ s2
+# Multiple concurrent worlds with an external matcher:
+SESSION_ID=s2 npm run client    # connect to the existing world s2
 
-# UI: http://localhost:8080/  →  «دنیای جدید (auto)» یا کلاینت‌ها را وصل کن
+# UI: http://localhost:8080/  →  "New world (auto)" or connect clients
 ```
 
-تیون با env: `CYCLE_MS`, `DRIVER_SPEED`, `RIDER_ARRIVAL_RATE`, `DRIVER_COUNT`, `SEED`, …
+Tune with env: `CYCLE_MS`, `DRIVER_SPEED`, `RIDER_ARRIVAL_RATE`, `DRIVER_COUNT`, `SEED`, …
 
-## ۶. عدالت و تکرارپذیری
+## 6. Fairness and Reproducibility
 
-- همهٔ سشن‌ها با `SEED` یکسان ساخته می‌شوند ⇒ موقعیت اولیهٔ رانندگان و توالیِ درخواست‌ها یکسان است.
-- برای رتبه‌بندی: هر شرکت‌کننده روی یک سشن جدا با همان seed؛ سپس `scoreboard` ها مقایسه می‌شوند.
+- All sessions are created with the same `SEED` ⇒ the initial positions of drivers and the sequence of requests are identical.
+- For ranking: each participant runs on a separate session with the same seed; then the `scoreboard`s are compared.
 
-## ۷. کارهای باقی‌مانده (Roadmap)
+## 7. Remaining Work (Roadmap)
 
-- [ ] تیون پارامترها (سرعت، نرخ ورود، کرایه) — فعلاً placeholder.
-- [ ] فرمول نهایی امتیاز مسابقه + نمایش رتبه‌بندی بینِ سشن‌ها.
-- [ ] احراز هویت/مالکیتِ سشن (الان هرکس به هر سشن دسترسی دارد).
-- [ ] پایداریِ سشن‌ها (الان in-memory و با ری‌استارت پاک می‌شوند).
-- [ ] حالت headless/batch برای اجرای خودکارِ چند seed.
-- [ ] محدودیت زمان پاسخ Matcher در هر cycle + ثبت لاگ برای replay.
+- [ ] Tune parameters (speed, arrival rate, fare) — currently placeholder.
+- [ ] Final competition scoring formula + display of ranking across sessions.
+- [ ] Session authentication/ownership (right now anyone can access any session).
+- [ ] Session persistence (currently in-memory and wiped on restart).
+- [ ] Headless/batch mode for automatically running multiple seeds.
+- [ ] Matcher response time limit per cycle + logging for replay.

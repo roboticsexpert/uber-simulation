@@ -1,32 +1,32 @@
 # 🚕 Uber-Sim — Matching Arena
 
-پلتفرم یک مسابقهٔ کدنویسی: شرکت‌کننده‌ها الگوریتم **Matching** (تخصیص راننده به مسافر) را در یک شبیه‌سازی زندهٔ Uber می‌نویسند.
+A coding-competition platform: participants write a **Matching** algorithm (assigning drivers to riders) inside a live Uber simulation.
 
-## شروع سریع
+## Quick Start
 
 ```bash
 npm install
-npm run engine:fast     # engine + UI روی http://localhost:8080  (cycle سریع برای تست)
-npm run client          # در ترمینال دیگر: Matcher نمونه
+npm run engine:fast     # engine + UI on http://localhost:8080  (fast cycle for testing)
+npm run client          # in another terminal: sample Matcher
 ```
 
-سپس `http://localhost:8080/` را باز کن و **▶ شروع** را بزن.
+Then open `http://localhost:8080/` and click **▶ Start**.
 
-برای اجرای واقعی مسابقه `npm run engine` (cycle = ۳۰ ثانیه، session = ۲ ساعت).
+To run a real competition use `npm run engine` (cycle = 30 seconds, session = 2 hours).
 
-## این چیه؟
+## What is this?
 
-- **Engine** دنیایی با راننده و مسافر را شبیه‌سازی می‌کند و هر cycle جلو می‌برد.
-- **UI** نقشهٔ زنده را نشان می‌دهد (رانندگان، درخواست‌ها، جدول امتیاز).
-- **Matcher** کلاینت شرکت‌کننده است: `GET /state` می‌گیرد، تصمیم می‌گیرد، `POST /assign` می‌فرستد.
+- The **Engine** simulates a world of drivers and riders and advances it each cycle.
+- The **UI** shows the live map (drivers, requests, scoreboard).
+- The **Matcher** is the participant's client: it fetches `GET /state`, makes a decision, and sends `POST /assign`.
 
-شرکت‌کننده فقط تابع `decide()` در [`client/sample-client.ts`](client/sample-client.ts) را عوض می‌کند (یا با هر زبانی همان دو endpoint را صدا می‌زند).
+Participants only change the `decide()` function in [`client/sample-client.ts`](client/sample-client.ts) (or call the same two endpoints in any language).
 
-## مستندات
+## Documentation
 
-- 📖 [قوانین بازی](docs/GAME_DESIGN.md) — راننده، مسافر، هزینه، رِیتینگ، خواب.
-- 🔧 [معماری پلتفرم و API](docs/PLATFORM.md) — endpointها، چرخهٔ cycle، اجرا، تیون.
+- 📖 [Game Rules](docs/GAME_DESIGN.md) — driver, rider, fare, rating, sleep.
+- 🔧 [Platform Architecture and API](docs/PLATFORM.md) — endpoints, the cycle loop, running, tuning.
 
-## وضعیت
+## Status
 
-نسخهٔ اولیهٔ کارکننده. پارامترها (سرعت، نرخ ورود، کرایه) فعلاً placeholder و قابل تیون با env‌اند — به roadmap در سند پلتفرم نگاه کن.
+An early working version. The parameters (speed, arrival rate, fare) are currently placeholders and tunable via env — see the roadmap in the platform document.

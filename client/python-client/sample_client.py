@@ -69,6 +69,8 @@ async def main() -> None:
         session = create_session(name)
         print(f"🌍 New world created: {session} (creator: {name})")
 
+    print(f"👀 Watch your world live:  {BASE}/world.html?id={session}")
+
     url = f"{WS_BASE}/sessions/{session}/ws"
     async with websockets.connect(url) as ws:
         print(f"🔌 Socket connected to {session} — waiting for state…")

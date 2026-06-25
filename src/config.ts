@@ -1,7 +1,7 @@
 /**
- * تمام پارامترهای قابل تیون شبیه‌سازی در یک جا.
- * مقادیر فعلاً تقریبی‌اند و بعداً تیون می‌شوند (طبق خواستهٔ تیم).
- * هر مقدار با env قابل override است تا تیون‌کردن بدون تغییر کد ممکن باشد.
+ * All tunable simulation parameters in one place.
+ * Values are currently approximate and will be tuned later (per the team's request).
+ * Every value can be overridden via env so tuning is possible without changing code.
  */
 
 const num = (name: string, def: number): number => {
@@ -10,45 +10,45 @@ const num = (name: string, def: number): number => {
 };
 
 export const config = {
-  // ---- نقشه / دنیا ----
+  // ---- map / world ----
   worldWidth: num("WORLD_WIDTH", 8_000),
   worldHeight: num("WORLD_HEIGHT", 8_000),
 
-  // ---- زمان / session ----
-  /** هر cycle چند میلی‌ثانیهٔ واقعی طول می‌کشد (خواستهٔ کاربر: 30 ثانیه). */
+  // ---- time / session ----
+  /** How many real milliseconds each cycle lasts (user's request: 30 seconds). */
   cycleMs: num("CYCLE_MS", 1_000),
-  /** session چند cycle طول می‌کشد. 2 ساعت / 30 ثانیه = 240. */
+  /** How many cycles a session lasts. 2 hours / 30 seconds = 240. */
   sessionTicks: num("SESSION_TICKS", 240),
   /**
-   * بعد از تمام‌شدنِ سشن، چند میلی‌ثانیه در حافظه نگه داشته شود تا UI وضعیتِ نهایی را
-   * نشان دهد، سپس پاک شود (جلوگیری از نشتیِ حافظه). صفر = حذفِ فوری.
+   * After a session finishes, how many milliseconds to keep it in memory so the UI can
+   * show the final state, then clear it (preventing a memory leak). Zero = immediate removal.
    */
   finishedSessionTtlMs: num("FINISHED_SESSION_TTL_MS", 30_000),
-  /** هر cycle معادل چند «دقیقهٔ بازی» است. */
+  /** How many "game minutes" each cycle corresponds to. */
   minutesPerTick: num("MINUTES_PER_TICK", 1),
 
-  // ---- رانندگان ----
+  // ---- drivers ----
   driverCount: num("DRIVER_COUNT", 100),
-  /** سرعت راننده: واحد فاصله بر دقیقهٔ بازی. (placeholder — تیون می‌شود) */
+  /** Driver speed: distance units per game minute. (placeholder — will be tuned) */
   driverSpeed: num("DRIVER_SPEED", 750),
-  /** بدون سفر در این مدت (دقیقه) → خواب. */
+  /** No trip for this duration (minutes) → sleep. */
   driverIdleSleepMinutes: num("DRIVER_IDLE_SLEEP", 30),
-  /** مدت خواب راننده (دقیقه) قبل از بیداری. */
+  /** How long a driver sleeps (minutes) before waking up. */
   driverSleepMinutes: num("DRIVER_SLEEP", 60),
 
-  // ---- مسافران / درخواست‌ها ----
-  /** میانگین تعداد درخواست جدید در هر cycle (توزیع پواسون). */
+  // ---- riders / requests ----
+  /** Average number of new requests per cycle (Poisson distribution). */
   riderArrivalRate: num("RIDER_ARRIVAL_RATE", 10),
-  /** سقف صبر مسافر (دقیقه) از درخواست تا pickup. */
+  /** Maximum rider patience (minutes) from request to pickup. */
   riderPatienceMinutes: num("RIDER_PATIENCE", 5),
 
-  // ---- هزینه ----
+  // ---- fare ----
   baseFare: num("BASE_FARE", 5),
   perDistanceFare: num("PER_DISTANCE_FARE", 1.5),
 
-  // ---- شبکه ----
+  // ---- network ----
   port: num("PORT", 8080),
-  /** seed برای تکرارپذیری سناریو (عدالت مسابقه). */
+  /** Seed for scenario reproducibility (competition fairness). */
   seed: num("SEED", 42),
 } as const;
 

@@ -1,21 +1,24 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════════════╗
- * ║  TRIAGE MATCHER — مدلِ فکری «اورژانس» (Earliest-Deadline-First)            ║
+ * ║  TRIAGE MATCHER — the "emergency room" mindset (Earliest-Deadline-First)   ║
  * ╚══════════════════════════════════════════════════════════════════════════╝
  *
- * فلسفهٔ تصمیم: مثلِ پزشکِ تریاژ. هر مسافر یک «مهلت» دارد (سقفِ صبر منهای انتظارِ
- * فعلی). مسافری که به کنسل نزدیک‌تر است اول نجات داده می‌شود. اما — برخلافِ
- * greedyِ نمونه — هیچ راننده‌ای را روی یک پیکاپِ محکوم‌به‌شکست هدر نمی‌دهیم:
- * تنها رانندهٔ «به‌موقع‌رس» (feasible) تخصیص می‌گیرد. اگر هیچ راننده‌ای به‌موقع
- * نرسد، آن درخواست رها می‌شود تا راننده برای یک نجاتِ شدنی آزاد بماند.
+ * Decision philosophy: like a triage doctor. Each rider has a "deadline" (the
+ * patience cap minus their current wait). The rider closest to canceling is
+ * rescued first. But — unlike the sample greedy — we don't waste any driver on
+ * a pickup that's doomed to fail: only an "on-time" (feasible) driver gets
+ * assigned. If no driver can arrive in time, that request is dropped so the
+ * driver stays free for a feasible rescue.
  *
- * تفاوت با greedy:  greedy نزدیک‌ترین راننده را حتی اگر دیر برسد می‌فرستد
- *                   (⟶ کنسل + هدررفتِ راننده). triage فقط شدنی‌ها را می‌بندد.
- * تفاوت با smart:   smart یک بهینهٔ سراسری (Hungarian) حل می‌کند؛ triage یک
- *                   زمان‌بندِ حریصانهٔ EDF است — ساده، سریع، و کنسل‌گریز.
+ * Difference from greedy:  greedy sends the nearest driver even if they arrive
+ *                          late (⟶ cancel + wasted driver). triage only commits
+ *                          feasible ones.
+ * Difference from smart:   smart solves a global optimum (Hungarian); triage is
+ *                          a greedy EDF scheduler — simple, fast, and
+ *                          cancel-averse.
  *
- * اجرا:  MATCHER_NAME="تریاژ" npm run client:triage
- *        BASE_URL=http://host:8080 SESSION_ID=brave-fox-1 npm run client:triage
+ * Run:  MATCHER_NAME="Triage" npm run client:triage
+ *       BASE_URL=http://host:8080 SESSION_ID=brave-fox-1 npm run client:triage
  */
 
 const BASE = process.env.BASE_URL ?? "http://localhost:8080";
@@ -43,19 +46,19 @@ interface Assignment { driverId: string; tripId: string; }
 
 const dist = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y);
 
-/** ----- منطقِ تریاژ ----- */
+/** ----- Triage logic ----- */
 function decide(state: State): Assignment[] {
   const { idleDrivers, openRequests } = state;
   if (idleDrivers.length === 0 || openRequests.length === 0) return [];
 
-  // minutesPerTick را از snapshot استنتاج کن؛ step = مسافتِ هر tick.
+  // Infer minutesPerTick from the snapshot; step = distance covered per tick.
   const mpt = state.tick > 0 ? state.minute / state.tick : 1;
   const step = state.config.driverSpeed * mpt;
   const patience = state.config.riderPatienceMinutes;
 
   const free = new Map(idleDrivers.map((d) => [d.id, d]));
 
-  // EDF: کم‌مهلت‌ترین (نزدیک‌ترین به کنسل) اول. مهلت = patience − waited.
+  // EDF: least slack (closest to canceling) first. slack = patience − waited.
   const reqs = [...openRequests].sort(
     (a, b) => (patience - a.waitedMinutes) - (patience - b.waitedMinutes),
   );
@@ -67,7 +70,7 @@ function decide(state: State): Assignment[] {
     for (const d of free.values()) {
       const D = dist(d.pos, req.origin);
       const ticks = Math.max(1, Math.ceil(D / step));
-      // آیا راننده پیش از کنسلِ مسافر می‌رسد؟ آخرین tickِ ASSIGNED باید ≤ patience باشد.
+      // Does the driver arrive before the rider cancels? The last ASSIGNED tick must be ≤ patience.
       const feasible = req.waitedMinutes + (ticks - 1) * mpt <= patience + 1e-9;
       if (!feasible) continue;
       if (D < bestD) { bestD = D; best = d; }
@@ -83,9 +86,9 @@ function decide(state: State): Assignment[] {
 
 async function ensureSession(): Promise<string> {
   if (process.env.SESSION_ID) return process.env.SESSION_ID;
-  const name = (process.env.MATCHER_NAME ?? "").trim();
+  const name = (process.env.MATCHER_NAME ?? "Triage").trim();
   if (!name) {
-    console.error('❌ MATCHER_NAME اجباری است. مثال:  MATCHER_NAME="تریاژ" npm run client:triage');
+    console.error('❌ MATCHER_NAME is required. Example:  MATCHER_NAME="Triage" npm run client:triage');
     process.exit(1);
   }
   const r = await fetch(`${BASE}/sessions`, {
@@ -93,7 +96,7 @@ async function ensureSession(): Promise<string> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name }),
   }).then((x) => x.json());
-  console.log(`🌍 دنیای جدید ساخته شد: ${r.id} (سازنده: ${name})`);
+  console.log(`🌍 New world created: ${r.id} (creator: ${name})`);
   return r.id as string;
 }
 
@@ -101,14 +104,14 @@ async function main() {
   const session = await ensureSession();
   const ws = new WebSocket(`${WS_BASE}/sessions/${session}/ws`);
 
-  ws.addEventListener("open", () => console.log(`🚑 TRIAGE به ${session} وصل شد — EDF + feasibility`));
-  ws.addEventListener("error", (e: any) => console.error("خطای سوکت:", e?.message ?? e));
-  ws.addEventListener("close", () => console.log("سوکت بسته شد."));
+  ws.addEventListener("open", () => console.log(`🚑 TRIAGE connected to ${session} — EDF + feasibility`));
+  ws.addEventListener("error", (e: any) => console.error("Socket error:", e?.message ?? e));
+  ws.addEventListener("close", () => console.log("Socket closed."));
 
   ws.addEventListener("message", (ev: any) => {
     const state: State = JSON.parse(ev.data as string);
     if (state.status === "finished") {
-      console.log(`🏁 session ${session} تمام شد.`);
+      console.log(`🏁 session ${session} finished.`);
       ws.close();
       process.exit(0);
     }
@@ -117,7 +120,7 @@ async function main() {
     ws.send(JSON.stringify({ tick: state.tick, assignments }));
     console.log(
       `tick ${String(state.tick).padStart(3)}/${state.sessionTicks} │ ` +
-        `${state.openRequests.length} req، ${state.idleDrivers.length} idle → ${assignments.length} نجاتِ شدنی`,
+        `${state.openRequests.length} req, ${state.idleDrivers.length} idle → ${assignments.length} feasible rescues`,
     );
   });
 }

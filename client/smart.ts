@@ -1,81 +1,81 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════════════╗
- * ║  SMART MATCHER — یک Matcher پیشرفته برای مسابقهٔ Matching                  ║
+ * ║  SMART MATCHER — an advanced matcher for the Matching competition         ║
  * ╚══════════════════════════════════════════════════════════════════════════╝
  *
- * جایگزینِ ارتقایافتهٔ `sample-client.ts`. همان قرارداد WebSocket، ولی مغزِ خیلی قوی‌تر.
+ * An upgraded replacement for `sample-client.ts`. Same WebSocket contract, but a much stronger brain.
  *
- * چرا از greedyِ نمونه بهتر است؟
- *   ۱) OPTIMAL MATCHING — به‌جای حریصانهٔ تک‌به‌تک، هر cycle یک تخصیصِ سراسریِ بهینه
- *      (max-weight bipartite matching با الگوریتم Hungarian/Kuhn–Munkres، O(n³)) حل
- *      می‌کند. وقتی راننده کمیاب است (contention) همین تفاوت همه‌چیز را عوض می‌کند.
- *   ۲) FEASIBILITY PRUNING — راننده‌ای را که قبل از سقفِ صبرِ مسافر نمی‌رسد هرگز
- *      تخصیص نمی‌دهد (تخصیصِ نشدنی = کنسلِ مسافر + هدررفتنِ راننده).
- *   ۳) ارزشِ lexicographic، آینهٔ دقیقِ امتیازِ engine: coverage ≫ rating ≫ distance.
- *      اول «تعدادِ تکمیل» را بیشینه می‌کند (بونوسِ غالب)، بعد ریتینگ، و در نهایت
- *      نزدیک‌ترین راننده را برای throughput و ریتینگِ بهتر می‌چیند.
- *   ۴) داشبوردِ زندهٔ ترمینال (نقشهٔ ASCII + آمار + scoreboard واقعی).
+ * Why is it better than the sample greedy matcher?
+ *   1) OPTIMAL MATCHING — instead of greedy one-by-one, each cycle it solves a globally optimal
+ *      assignment (max-weight bipartite matching via the Hungarian/Kuhn–Munkres algorithm, O(n³)).
+ *      When drivers are scarce (contention) this difference changes everything.
+ *   2) FEASIBILITY PRUNING — it never assigns a driver that cannot arrive before the rider's
+ *      patience limit (an infeasible assignment = rider cancellation + wasted driver).
+ *   3) Lexicographic value, an exact mirror of the engine's score: coverage ≫ rating ≫ distance.
+ *      It first maximizes the "number of completions" (the dominant bonus), then rating, and finally
+ *      picks the nearest driver for better throughput and rating.
+ *   4) A live terminal dashboard (ASCII map + stats + real scoreboard).
  *
- * بنچمارک (همان seed، ۲۴۰ cycle، در برابرِ sample-client):
- *   • config پیش‌فرضِ پروژه (راننده فراوان): ۱۰۰٪ تکمیل و صفر کنسل ⟶ نمونه ۹۹٪ با کنسل.
- *   • رژیمِ contention (راننده کمیاب): ‎+۶۹٪ تکمیلِ بیشتر، ریتینگِ مسافر ۳.۲ در برابرِ ۱.۲.
- *   تنها در یک config بسیار تُنُک و degenerate (≈۸۵٪ کنسل) نمونه کمی جلوتر است.
+ * Benchmark (same seed, 240 cycles, against sample-client):
+ *   • Project default config (abundant drivers): 100% completion and zero cancellations ⟶ sample 99% with cancellations.
+ *   • Contention regime (scarce drivers): +69% more completions, rider rating 3.2 vs 1.2.
+ *   Only in a very sparse, degenerate config (≈85% cancellation) is the sample slightly ahead.
  *
- * اجرا:
+ * Run:
  *   npm run client:smart
  *   BASE_URL=http://host:8080 SESSION_ID=brave-fox-1 npm run client:smart
- *   DASHBOARD=0 npm run client:smart        # حالتِ لاگِ ساده (بدون نقشه)
+ *   DASHBOARD=0 npm run client:smart        # simple log mode (no map)
  *
- * تیون با env: COMPLETION_BONUS, W_RIDER, W_DRIVER, W_DIST, URGENCY_W,
+ * Tune with env: COMPLETION_BONUS, W_RIDER, W_DRIVER, W_DIST, URGENCY_W,
  *              REPOSITION (off|greedy|center), CANCEL_PENALTY
  */
 
 import WebSocket from "ws";
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  پیکربندی
+//  Configuration
 // ─────────────────────────────────────────────────────────────────────────────
 const BASE = process.env.BASE_URL ?? "http://localhost:8080";
 const WS_BASE = BASE.replace(/^http/, "ws");
 const DASHBOARD = process.env.DASHBOARD !== "0" && !!process.stdout.isTTY;
 
 /**
- * تابعِ ارزش، lexicographic (سلسله‌مراتبی): coverage ≫ urgency ≫ rating ≫ distance.
- * بونوسِ تکمیل باید آن‌قدر بزرگ باشد که هیچ ترمِ دیگری «تعدادِ تکمیل» را قربانی نکند
- * (درسِ سخت: اگر COMPLETION_BONUS کوچک باشد، W_DIST·D آن را می‌بلعد و coverage می‌شکند).
+ * The value function, lexicographic (hierarchical): coverage ≫ urgency ≫ rating ≫ distance.
+ * The completion bonus must be large enough that no other term sacrifices the "number of completions"
+ * (hard lesson: if COMPLETION_BONUS is small, W_DIST·D swallows it and coverage breaks).
  */
-const COMPLETION_BONUS = num("COMPLETION_BONUS", 1e6); // ارزشِ صِرفِ تکمیلِ یک سفر (غالبِ مطلق)
+const COMPLETION_BONUS = num("COMPLETION_BONUS", 1e6); // the pure value of completing one trip (absolute dominant)
 /**
- * URGENCY_W — وزنِ اولویتِ درخواستِ بیشتر-منتظر-مانده.
- * تجربی ثابت شد که زیرِ contention **ضرر** می‌زند: دنبالِ درخواست‌های روبه‌انقضا رفتن
- * یعنی ریتینگِ پایین و اشغالِ راننده؛ بهتر است درخواست‌های تازه را سریع سرویس کنی
- * (انتظارِ کم ⇒ ریتینگِ بالا ⇒ هم مسافر هم راننده). پیش‌فرض = ۰ (خاموش).
+ * URGENCY_W — the priority weight for the longest-waiting request.
+ * Empirically proven to **hurt** under contention: chasing about-to-expire requests
+ * means low rating and tied-up drivers; it is better to serve fresh requests quickly
+ * (low wait ⇒ high rating ⇒ for both rider and driver). Default = 0 (off).
  */
 const URGENCY_W = num("URGENCY_W", 0);
-const W_RIDER = num("W_RIDER", 100); // وزنِ ریتینگِ مسافر (معیارِ ثانویه پس از coverage)
-const W_DRIVER = num("W_DRIVER", 100); // وزنِ ریتینگِ راننده
-const CANCEL_PENALTY = num("CANCEL_PENALTY", 2); // فقط برای تخمینِ score در داشبورد
+const W_RIDER = num("W_RIDER", 100); // rider rating weight (secondary criterion after coverage)
+const W_DRIVER = num("W_DRIVER", 100); // driver rating weight
+const CANCEL_PENALTY = num("CANCEL_PENALTY", 2); // only for estimating the score in the dashboard
 /**
- * W_DIST — وزنِ جریمهٔ فاصلهٔ pickup در ارزشِ یک تخصیصِ feasible.
- * کلیدِ throughput: رانندهٔ نزدیک‌تر سریع‌تر آزاد می‌شود ⇒ سفرهای بیشتر در کلِ بازی.
- * مقدارِ بزرگ‌تر = اولویتِ شدیدتر به نزدیک‌ترین راننده (و در نتیجه rating بهتر).
+ * W_DIST — the weight of the pickup-distance penalty in the value of a feasible assignment.
+ * The key to throughput: a nearer driver frees up faster ⇒ more trips over the whole game.
+ * A larger value = a stronger priority for the nearest driver (and consequently better rating).
  */
 const W_DIST = num("W_DIST", 1.0);
 
 /**
- * REPOSITIONING — کلیدِ بُردن در دنیای کرانه‌دار.
- * رانندهٔ idle خودش حرکت نمی‌کند؛ تنها راهِ جابه‌جایی‌اش، تخصیص به یک سفر است.
- * رانندگانِ بیکار را که در feasible-matching استفاده نشدند، عمداً به سمتِ تقاضا
- * (مرکزِ نقشه — جایی که بیشترین مساحتِ قابلِ‌سرویس را دارد) هل می‌دهیم. سفر کنسل
- * می‌شود ولی راننده در موقعیتِ بهتری برای cycleهای بعد رها می‌شود.
- *   "off"    → بدونِ repositioning (پیش‌فرض — با وزن‌های فعلی امن‌ترین و قوی‌ترین)
- *   "greedy" → هر درخواستِ بی‌راننده را به نزدیک‌ترین رانندهٔ آزاد بفرست (جابه‌جایی)
- *   "center" → فقط اگر راننده به مرکزِ نقشه نزدیک‌تر شود
- * نکته: با تقاضای یکنواخت و وزن‌های lexicographic، repositioning تجربی یا خنثی بود
- * یا کمی ضرر زد؛ پس به‌صورتِ آزمایشی (opt-in) نگه داشته شده و پیش‌فرض خاموش است.
+ * REPOSITIONING — the key to winning in a bounded world.
+ * An idle driver does not move on its own; the only way to relocate it is to assign it to a trip.
+ * Idle drivers that were not used in the feasible matching are deliberately pushed toward demand
+ * (the map center — where the most serviceable area is). The trip gets cancelled
+ * but the driver is left in a better position for the next cycles.
+ *   "off"    → no repositioning (default — the safest and strongest with the current weights)
+ *   "greedy" → send each driverless request to the nearest free driver (relocation)
+ *   "center" → only if the driver moves closer to the map center
+ * Note: with uniform demand and lexicographic weights, repositioning was empirically either neutral
+ * or slightly harmful; so it is kept experimental (opt-in) and is off by default.
  */
 const REPOSITION = (process.env.REPOSITION ?? "off").toLowerCase();
-const REPOSITION_WEIGHT = num("REPOSITION_WEIGHT", 0.05); // مقیاسِ ارزشِ جابه‌جایی (« COMPLETION_BONUS)
+const REPOSITION_WEIGHT = num("REPOSITION_WEIGHT", 0.05); // the scale of the relocation value (« COMPLETION_BONUS)
 
 function num(name: string, def: number): number {
   const v = process.env[name];
@@ -83,7 +83,7 @@ function num(name: string, def: number): number {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  تایپ‌ها (شکلِ پیامِ WebSocket و viz)
+//  Types (the shape of the WebSocket and viz messages)
 // ─────────────────────────────────────────────────────────────────────────────
 interface Vec2 { x: number; y: number; }
 interface IdleDriver { id: string; pos: Vec2; }
@@ -134,11 +134,11 @@ interface VizState {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  هندسه و امتیاز — آینهٔ دقیقِ src/geometry.ts
+//  Geometry and scoring — an exact mirror of src/geometry.ts
 // ─────────────────────────────────────────────────────────────────────────────
 const dist = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y);
 
-/** ریتینگ از روی دقیقه — عیناً مطابقِ engine: <1→5، ≤2→4، ≤3→3، ≤4→2، بیشتر→1 */
+/** Rating from minutes — exactly matching the engine: <1→5, ≤2→4, ≤3→3, ≤4→2, more→1 */
 function ratingFromMinutes(m: number): number {
   if (m < 1) return 5;
   if (m <= 2) return 4;
@@ -156,16 +156,16 @@ interface PairValue {
 }
 
 /**
- * ارزشِ بستنِ راننده d به درخواستِ r. اگر «نشدنی» باشد (راننده قبل از کنسل نمی‌رسد)
- * مقدارِ null برمی‌گرداند تا اصلاً پیشنهاد نشود.
+ * The value of matching driver d to request r. If it is "infeasible" (the driver does not arrive
+ * before cancellation) it returns null so it is never proposed at all.
  *
- *   step    = واحدِ فاصله در هر tick = driverSpeed × minutesPerTick
- *   ticks   = تعداد tick تا رسیدن = ceil(D / step)  (حداقل ۱، چون pickup در همان
- *             cycle که تخصیص می‌دهیم رخ نمی‌دهد؛ یک step بعد می‌رسد)
- *   مسافر اگر waited از سقفِ صبر رد شود کنسل می‌کند. آخرین tickِ پیش از pickup
- *   که هنوز ASSIGNED است waited = waitedMinutes + (ticks-1)·mpt دارد ⇒ باید ≤ patience.
- *   ریتینگِ راننده = تابعِ زمانِ رسیدن (ticks·mpt).
- *   ریتینگِ مسافر = تابعِ کلِ انتظار = waitedMinutes + ticks·mpt.
+ *   step    = the distance unit per tick = driverSpeed × minutesPerTick
+ *   ticks   = the number of ticks until arrival = ceil(D / step)  (at least 1, because pickup does
+ *             not happen in the same cycle we assign in; it arrives one step later)
+ *   The rider cancels if its wait exceeds the patience limit. The last tick before pickup
+ *   that is still ASSIGNED has waited = waitedMinutes + (ticks-1)·mpt ⇒ must be ≤ patience.
+ *   Driver rating = a function of the arrival time (ticks·mpt).
+ *   Rider rating = a function of the total wait = waitedMinutes + ticks·mpt.
  */
 function pairValue(
   d: IdleDriver,
@@ -176,7 +176,7 @@ function pairValue(
 ): PairValue | null {
   const D = dist(d.pos, r.origin);
   const ticks = Math.max(1, Math.ceil(D / step));
-  // شرطِ feasibility — اگر دیر برسد، مسافر قبلش کنسل می‌کند.
+  // Feasibility condition — if it arrives late, the rider cancels beforehand.
   if (r.waitedMinutes + (ticks - 1) * mpt > patience + 1e-9) return null;
 
   const driverArrivalMin = ticks * mpt;
@@ -193,9 +193,9 @@ function pairValue(
 }
 
 /**
- * ارزشِ repositioning برای یک جفتِ «نشدنی» (راننده به‌موقع نمی‌رسد، سفر کنسل خواهد شد).
- * راننده تا لحظهٔ کنسل به سمتِ مبدأ حرکت می‌کند و در موقعیتِ جدید رها می‌شود.
- * ارزش = مقدارِ نزدیک‌ترشدنِ راننده به مرکزِ نقشه (اگر دور شود، صفر ⇒ تخصیص نمی‌دهیم).
+ * The repositioning value for an "infeasible" pair (the driver does not arrive in time, the trip will be cancelled).
+ * The driver moves toward the origin until the moment of cancellation and is left at a new position.
+ * Value = how much closer the driver gets to the map center (if it moves away, zero ⇒ we do not assign).
  */
 function repositionValue(
   d: IdleDriver,
@@ -207,15 +207,15 @@ function repositionValue(
 ): number {
   if (REPOSITION === "off") return 0;
   const D = dist(d.pos, r.origin);
-  // تعداد stepهایی که راننده پیش از کنسل حرکت می‌کند.
+  // The number of steps the driver moves before cancellation.
   const jCancel = Math.floor((patience - r.waitedMinutes) / mpt) + 1;
   if (jCancel <= 0) return 0;
   const travel = Math.min(D, jCancel * step);
   if (REPOSITION === "greedy") {
-    // مثلِ نمونه: نزدیک‌ترین راننده را بفرست (هرچه نزدیک‌تر، جذاب‌تر).
+    // Like the sample: send the nearest driver (the nearer, the more attractive).
     return Math.max(0, 1000 - D) * REPOSITION_WEIGHT;
   }
-  // "center": موقعیتِ راننده پس از حرکت به سمتِ مبدأ.
+  // "center": the driver's position after moving toward the origin.
   const t = D > 0 ? travel / D : 0;
   const np = { x: d.pos.x + (r.origin.x - d.pos.x) * t, y: d.pos.y + (r.origin.y - d.pos.y) * t };
   const gain = dist(d.pos, center) - dist(np, center);
@@ -223,8 +223,8 @@ function repositionValue(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  الگوریتمِ Hungarian (Kuhn–Munkres) — تخصیصِ کم‌هزینهٔ بهینه روی ماتریسِ مربعی
-//  O(n³). نسخهٔ پتانسیل‌ها (e-maxx). نیازمند n ≤ m؛ ما همیشه مربعی پَد می‌کنیم.
+//  The Hungarian (Kuhn–Munkres) algorithm — optimal min-cost assignment on a square matrix
+//  O(n³). The potentials version (e-maxx). Requires n ≤ m; we always pad to square.
 // ─────────────────────────────────────────────────────────────────────────────
 function minCostAssignment(cost: number[][]): number[] {
   const n = cost.length;
@@ -232,7 +232,7 @@ function minCostAssignment(cost: number[][]): number[] {
   const INF = Number.POSITIVE_INFINITY;
   const u = new Array<number>(n + 1).fill(0);
   const v = new Array<number>(m + 1).fill(0);
-  const p = new Array<number>(m + 1).fill(0); // p[j] = ردیفِ بسته‌شده به ستونِ j
+  const p = new Array<number>(m + 1).fill(0); // p[j] = the row matched to column j
   const way = new Array<number>(m + 1).fill(0);
 
   for (let i = 1; i <= n; i++) {
@@ -266,19 +266,19 @@ function minCostAssignment(cost: number[][]): number[] {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  مغزِ تصمیم — تخصیصِ بهینه
+//  The decision brain — optimal assignment
 // ─────────────────────────────────────────────────────────────────────────────
 interface Decision {
   assignments: Assignment[];
-  /** برای داشبورد: جزئیاتِ هر تخصیصِ feasibleِ این cycle. */
+  /** For the dashboard: the details of each feasible assignment in this cycle. */
   picked: { driverId: string; tripId: string; rRider: number; rDriver: number; ticks: number }[];
   idle: number;
   open: number;
-  /** درخواست‌هایی که هیچ رانندهٔ شدنی نداشتند (در خطرِ کنسل). */
+  /** Requests that had no feasible driver (at risk of cancellation). */
   unreachable: number;
-  /** تعدادِ تخصیصِ feasible (تکمیلِ واقعی). */
+  /** The number of feasible assignments (actual completions). */
   served: number;
-  /** تعدادِ رانندگانی که فقط برای repositioning فرستاده شدند. */
+  /** The number of drivers sent only for repositioning. */
   repositioned: number;
 }
 
@@ -291,7 +291,7 @@ function decide(state: State): Decision {
   };
   if (drivers.length === 0 || reqs.length === 0) return empty;
 
-  // minutesPerTick را از خودِ snapshot استنتاج کن (در snapshot مستقیم نیست).
+  // Infer minutesPerTick from the snapshot itself (it is not directly in the snapshot).
   const mpt = state.tick > 0 ? state.minute / state.tick : 1;
   const step = state.config.driverSpeed * mpt;
   const patience = state.config.riderPatienceMinutes;
@@ -301,12 +301,12 @@ function decide(state: State): Decision {
   const nR = reqs.length;
   const N = Math.max(nD, nR);
 
-  // ماتریسِ ارزشِ یکپارچه:
-  //   feasible    → COMPLETION_BONUS + ratings  (~۱۰۰، همیشه بر repositioning غالب)
-  //   نشدنی       → ارزشِ repositioning (« COMPLETION_BONUS، فقط هل‌دادن به سمتِ مرکز)
-  //   ۰           → یعنی «بیکار بمان» (یالِ dummy یا جابه‌جاییِ بی‌فایده)
-  // max-weight matching ⇒ min-cost با cost = -value. یک Hungarian هر دو لایه را
-  // هم‌زمان و بهینه حل می‌کند: اول همهٔ feasibleها، بعد بهترین repositioningها.
+  // Unified value matrix:
+  //   feasible    → COMPLETION_BONUS + ratings  (~100, always dominant over repositioning)
+  //   infeasible  → the repositioning value (« COMPLETION_BONUS, just pushing toward the center)
+  //   0           → means "stay idle" (a dummy edge or a useless relocation)
+  // max-weight matching ⇒ min-cost with cost = -value. One Hungarian solves both layers
+  // simultaneously and optimally: first all the feasible ones, then the best repositionings.
   const cost: number[][] = [];
   const detail: (PairValue | null)[][] = [];
   let reachableReqs = 0;
@@ -323,12 +323,12 @@ function decide(state: State): Decision {
           detail[i][j] = pv;
           if (!reqHasOption[j]) { reqHasOption[j] = true; reachableReqs++; }
         } else {
-          // نشدنی → ارزشِ repositioning (می‌تواند ۰ باشد ⇒ مثلِ dummy، تخصیص نمی‌دهد).
+          // infeasible → the repositioning value (can be 0 ⇒ like a dummy, it does not assign).
           const rv = repositionValue(drivers[i], reqs[j], step, patience, mpt, center);
           cost[i][j] = -rv;
         }
       } else {
-        cost[i][j] = 0; // یالِ dummy.
+        cost[i][j] = 0; // dummy edge.
       }
     }
   }
@@ -344,7 +344,7 @@ function decide(state: State): Decision {
     if (j < 0 || j >= nR) continue;
     const pv = detail[i][j];
     if (pv) {
-      // تخصیصِ واقعی (feasible).
+      // Actual assignment (feasible).
       assignments.push({ driverId: drivers[i].id, tripId: reqs[j].id });
       picked.push({
         driverId: drivers[i].id, tripId: reqs[j].id,
@@ -352,7 +352,7 @@ function decide(state: State): Decision {
       });
       served++;
     } else if (cost[i][j] < -1e-9) {
-      // یالِ نشدنی ولی با ارزشِ repositioning مثبت ⇒ راننده را برای جابه‌جایی بفرست.
+      // Infeasible edge but with a positive repositioning value ⇒ send the driver to relocate.
       assignments.push({ driverId: drivers[i].id, tripId: reqs[j].id });
       repositioned++;
     }
@@ -367,7 +367,7 @@ function decide(state: State): Decision {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  ابزارِ ترمینال (ANSI / truecolor)
+//  Terminal utilities (ANSI / truecolor)
 // ─────────────────────────────────────────────────────────────────────────────
 const E = "\x1b[";
 const RESET = E + "0m";
@@ -380,14 +380,14 @@ const HOME = E + "H";
 const CLR_EOL = E + "K";
 const CLR_DOWN = E + "J";
 
-// پالت
+// Palette
 const C = {
   ink: fg(226, 232, 240),
   dim: fg(100, 116, 139),
-  accent: fg(56, 189, 248), // آبی
-  good: fg(74, 222, 128), // سبز
-  warn: fg(250, 204, 21), // زرد
-  bad: fg(248, 113, 113), // قرمز
+  accent: fg(56, 189, 248), // blue
+  good: fg(74, 222, 128), // green
+  warn: fg(250, 204, 21), // yellow
+  bad: fg(248, 113, 113), // red
   purple: fg(167, 139, 250),
   driver: fg(56, 189, 248),
   onTrip: fg(74, 222, 128),
@@ -414,14 +414,14 @@ function sparkline(arr: number[], width: number): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  داشبورد
+//  Dashboard
 // ─────────────────────────────────────────────────────────────────────────────
-const MW = 56; // عرضِ نقشه (کاراکتر)
-const MH = 20; // ارتفاعِ نقشه (خط)
+const MW = 56; // map width (characters)
+const MH = 20; // map height (lines)
 
 interface Telemetry {
   sessionId: string;
-  assignHistory: number[]; // تعدادِ تخصیص در هر cycle (برای sparkline)
+  assignHistory: number[]; // the number of assignments per cycle (for the sparkline)
   reqHistory: number[];
   totalAssigned: number;
   myRiderSum: number;
@@ -440,7 +440,7 @@ function renderDashboard(
   const W = state.config.worldWidth || 100;
   const H = state.config.worldHeight || 100;
 
-  // ── شبکهٔ نقشه ──
+  // ── Map grid ──
   type Cell = { ch: string; color: string; pr: number };
   const grid: Cell[][] = Array.from({ length: MH }, () =>
     Array.from({ length: MW }, () => ({ ch: "·", color: C.dim, pr: 0 })),
@@ -451,7 +451,7 @@ function renderDashboard(
     if (pr >= grid[row][col].pr) grid[row][col] = { ch, color, pr };
   };
 
-  // رانندگان: اگر viz داریم همه را با حالتشان نشان بده، وگرنه فقط idleهای snapshot.
+  // Drivers: if we have viz, show all with their state, otherwise only the idle ones from the snapshot.
   if (viz) {
     for (const dr of viz.drivers) {
       if (dr.state === "IDLE") put(dr.pos, "•", C.driver, 1);
@@ -462,20 +462,20 @@ function renderDashboard(
     for (const dr of state.idleDrivers) put(dr.pos, "•", C.driver, 1);
   }
 
-  // درخواست‌های باز: رنگ بر اساسِ فوریت (نزدیکِ سقفِ صبر → قرمز).
+  // Open requests: color based on urgency (near the patience limit → red).
   const patience = state.config.riderPatienceMinutes;
   for (const r of state.openRequests) {
     const urgency = r.waitedMinutes / Math.max(1, patience);
     const col = urgency >= 0.8 ? C.bad : urgency >= 0.5 ? C.warn : C.req;
     put(r.origin, "◆", col, 3);
   }
-  // تخصیص‌های همین cycle: راننده و مبدأ را برجسته کن.
+  // This cycle's assignments: highlight the driver and the origin.
   const pickedReq = new Set(d.picked.map((p) => p.tripId));
   const pickedDrv = new Set(d.picked.map((p) => p.driverId));
   for (const r of state.openRequests) if (pickedReq.has(r.id)) put(r.origin, "◎", C.good, 5);
   for (const dr of state.idleDrivers) if (pickedDrv.has(dr.id)) put(dr.pos, "★", C.good, 6);
 
-  // ── سرستون و progress ──
+  // ── Header and progress ──
   const prog = state.sessionTicks ? state.tick / state.sessionTicks : 0;
   const lines: string[] = [];
   const title = `${BOLD}${C.accent}╔═ SMART MATCHER ${C.dim}» ${C.ink}${t.sessionId}${RESET}`;
@@ -486,44 +486,44 @@ function renderDashboard(
       ` ${C.ink}${(prog * 100).toFixed(0)}%${RESET}`,
   );
 
-  // ── بدنه: نقشه (چپ) + پنل آمار (راست) ──
+  // ── Body: map (left) + stats panel (right) ──
   const sb = viz?.scoreboard;
   const avg = (sum: number, n: number) => (n ? sum / n : 0);
 
   const panel: string[] = [];
-  panel.push(`${BOLD}${C.purple}── این cycle ──${RESET}`);
-  panel.push(`${C.dim}درخواستِ باز  ${C.ink}${pad(String(d.open), 4)}${C.dim}idle ${C.ink}${d.idle}`);
-  panel.push(`${C.good}سرویسِ feasible ${BOLD}${pad(String(d.served), 3)}${RESET}`);
+  panel.push(`${BOLD}${C.purple}── this cycle ──${RESET}`);
+  panel.push(`${C.dim}open requests ${C.ink}${pad(String(d.open), 4)}${C.dim}idle ${C.ink}${d.idle}`);
+  panel.push(`${C.good}feasible served ${BOLD}${pad(String(d.served), 3)}${RESET}`);
   panel.push(`${C.purple}↪︎ reposition  ${pad(String(d.repositioned), 3)}${RESET}`);
   const urgentLost = d.unreachable;
   panel.push(
-    `${urgentLost ? C.warn : C.dim}بی‌راننده   ${pad(String(urgentLost), 4)}${RESET}`,
+    `${urgentLost ? C.warn : C.dim}driverless  ${pad(String(urgentLost), 4)}${RESET}`,
   );
   const cycR = avg(d.picked.reduce((s, p) => s + p.rRider, 0), d.picked.length);
   const cycD = avg(d.picked.reduce((s, p) => s + p.rDriver, 0), d.picked.length);
-  panel.push(`${C.dim}ریتینگِ تخصیصِ این cycle:`);
+  panel.push(`${C.dim}this cycle's assignment rating:`);
   panel.push(`  ${C.ink}rider  ${bar(cycR / 5, 10, C.warn)} ${cycR.toFixed(2)}`);
   panel.push(`  ${C.ink}driver ${bar(cycD / 5, 10, C.accent)} ${cycD.toFixed(2)}`);
   panel.push("");
-  panel.push(`${BOLD}${C.purple}── کل (scoreboard واقعی) ──${RESET}`);
+  panel.push(`${BOLD}${C.purple}── total (real scoreboard) ──${RESET}`);
   if (sb) {
-    panel.push(`${C.good}✓ تکمیل   ${BOLD}${pad(String(sb.completed), 5)}${RESET}${C.bad}✗ کنسل ${sb.cancelled}${RESET}`);
+    panel.push(`${C.good}✓ completed ${BOLD}${pad(String(sb.completed), 5)}${RESET}${C.bad}✗ cancelled ${sb.cancelled}${RESET}`);
     panel.push(`${C.ink}rider ⭐ ${bar(sb.riderAvg / 5, 10, C.warn)} ${sb.riderAvg.toFixed(2)}`);
     panel.push(`${C.ink}driver⭐ ${bar(sb.driverAvg / 5, 10, C.accent)} ${sb.driverAvg.toFixed(2)}`);
-    panel.push(`${C.dim}درآمد    ${C.ink}${sb.revenue.toFixed(0)}`);
+    panel.push(`${C.dim}revenue  ${C.ink}${sb.revenue.toFixed(0)}`);
     const score = sb.riderRatingSum + sb.driverRatingSum - CANCEL_PENALTY * sb.cancelled;
     const total = sb.completed + sb.cancelled;
     const compRate = total ? sb.completed / total : 0;
-    panel.push(`${C.dim}نرخِ تکمیل ${bar(compRate, 10, C.good)} ${(compRate * 100).toFixed(0)}%`);
+    panel.push(`${C.dim}completion rate ${bar(compRate, 10, C.good)} ${(compRate * 100).toFixed(0)}%`);
     panel.push(`${BOLD}${C.purple}score≈ ${C.ink}${score.toFixed(0)}${RESET} ${C.dim}(=Σrating−${CANCEL_PENALTY}·cancel)`);
   } else {
-    panel.push(`${C.dim}(در انتظارِ /viz…)`);
+    panel.push(`${C.dim}(waiting for /viz…)`);
   }
   panel.push("");
   panel.push(`${C.dim}assign/cycle ${C.accent}${sparkline(t.assignHistory, 22)}`);
   panel.push(`${C.dim}open/cycle   ${C.warn}${sparkline(t.reqHistory, 22)}`);
 
-  // ── چیدنِ نقشه و پنل کنار هم ──
+  // ── Laying out the map and panel side by side ──
   const top = `${C.dim}╠${"═".repeat(MW)}╦══════════════════════════════╗${RESET}`;
   lines.push(top);
   for (let row = 0; row < MH; row++) {
@@ -537,36 +537,36 @@ function renderDashboard(
   }
   lines.push(`${C.dim}╚${"═".repeat(MW)}╩══════════════════════════════╝${RESET}`);
 
-  // ── راهنما ──
+  // ── Legend ──
   lines.push(
     `${C.driver}• idle ${C.onTrip}▸ on-trip ${C.offline}× offline ` +
       `${C.req}◆ req ${C.bad}◆ urgent ${C.good}★ assigned${RESET}`,
   );
 
-  // هر خط را با CLR_EOL تمیز کن تا باقی‌ماندهٔ فریمِ قبل پاک شود.
+  // Clean each line with CLR_EOL so leftovers from the previous frame are cleared.
   return HOME + lines.map((l) => l + CLR_EOL).join("\n") + "\n" + CLR_DOWN;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  حالتِ ساده (بدونِ TTY)
+//  Simple mode (no TTY)
 // ─────────────────────────────────────────────────────────────────────────────
 function logCompact(state: State, d: Decision): void {
   const repo = d.repositioned ? `  ↪︎${d.repositioned} reposition` : "";
   console.log(
     `tick ${String(state.tick).padStart(3)}/${state.sessionTicks} │ ` +
-      `${d.open} req، ${d.idle} idle → ${d.served} سرویس${repo}`,
+      `${d.open} req, ${d.idle} idle → ${d.served} served${repo}`,
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  راه‌اندازی و اتصال
+//  Startup and connection
 // ─────────────────────────────────────────────────────────────────────────────
 async function ensureSession(): Promise<string> {
   const fromEnv = process.env.SESSION_ID;
   if (fromEnv) return fromEnv;
-  const name = (process.env.MATCHER_NAME ?? "").trim();
+  const name = (process.env.MATCHER_NAME ?? "Smart").trim();
   if (!name) {
-    console.error('❌ MATCHER_NAME اجباری است. مثال:  MATCHER_NAME="تیم آلفا" npm run client:smart');
+    console.error('❌ MATCHER_NAME is required. Example:  MATCHER_NAME="Team Alpha" npm run client:smart');
     process.exit(1);
   }
   const r = await fetch(`${BASE}/sessions`, {
@@ -605,8 +605,8 @@ async function run(): Promise<void> {
 
   if (DASHBOARD) process.stdout.write(HIDE_CUR + E + "2J");
   else {
-    console.log(`🚀 SMART MATCHER به ${session} وصل می‌شود…`);
-    console.log(`   استراتژی: Hungarian optimal + feasibility pruning + score-aware cost`);
+    console.log(`🚀 SMART MATCHER is connecting to ${session}…`);
+    console.log(`   Strategy: Hungarian optimal + feasibility pruning + score-aware cost`);
   }
 
   let reconnects = 0;
@@ -617,7 +617,7 @@ async function run(): Promise<void> {
 
     ws.on("open", () => { reconnects = 0; });
     ws.on("error", (e: Error) => {
-      if (!DASHBOARD) console.error("خطای سوکت:", e?.message ?? e);
+      if (!DASHBOARD) console.error("Socket error:", e?.message ?? e);
     });
 
     ws.on("message", (raw: WebSocket.RawData) => {
@@ -635,11 +635,11 @@ async function run(): Promise<void> {
       }
       if (state.status !== "running") return;
 
-      // ۱) تصمیم بگیر و فوراً بفرست — کمترین تأخیرِ matching.
+      // 1) Decide and send immediately — minimum matching latency.
       const d = decide(state);
       ws.send(JSON.stringify({ tick: state.tick, assignments: d.assignments }));
 
-      // تله‌متری
+      // Telemetry
       telemetry.assignHistory.push(d.assignments.length);
       telemetry.reqHistory.push(d.open);
       telemetry.totalAssigned += d.assignments.length;
@@ -649,9 +649,9 @@ async function run(): Promise<void> {
         telemetry.myDriverSum += p.rDriver; telemetry.myDriverN++;
       }
 
-      // ۲) خروجی
+      // 2) Output
       if (DASHBOARD) {
-        // scoreboard واقعی را best-effort بگیر، بعد رندر کن.
+        // Best-effort fetch the real scoreboard, then render.
         fetchViz(session).then((viz) => {
           process.stdout.write(renderDashboard(state, viz, d, telemetry));
         });
@@ -675,19 +675,19 @@ async function finish(session: string, t: Telemetry): Promise<void> {
   const viz = await fetchViz(session);
   restoreTerminal();
   const sb = viz?.scoreboard;
-  console.log(`\n${BOLD}${C.accent}🏁 session ${session} تمام شد.${RESET}`);
+  console.log(`\n${BOLD}${C.accent}🏁 session ${session} finished.${RESET}`);
   if (sb) {
     const score = sb.riderRatingSum + sb.driverRatingSum - CANCEL_PENALTY * sb.cancelled;
     const total = sb.completed + sb.cancelled;
-    console.log(`${C.good}  ✓ تکمیل‌شده : ${sb.completed}${RESET}`);
-    console.log(`${C.bad}  ✗ کنسل‌شده  : ${sb.cancelled}${RESET}  ${C.dim}(${total ? ((sb.completed / total) * 100).toFixed(1) : "—"}% نرخِ تکمیل)`);
-    console.log(`${C.warn}  ⭐ ریتینگِ مسافر  : ${sb.riderAvg.toFixed(3)}${RESET}`);
-    console.log(`${C.accent}  ⭐ ریتینگِ راننده : ${sb.driverAvg.toFixed(3)}${RESET}`);
-    console.log(`${C.ink}  💰 درآمد : ${sb.revenue.toFixed(0)}${RESET}`);
+    console.log(`${C.good}  ✓ completed : ${sb.completed}${RESET}`);
+    console.log(`${C.bad}  ✗ cancelled : ${sb.cancelled}${RESET}  ${C.dim}(${total ? ((sb.completed / total) * 100).toFixed(1) : "—"}% completion rate)`);
+    console.log(`${C.warn}  ⭐ rider rating  : ${sb.riderAvg.toFixed(3)}${RESET}`);
+    console.log(`${C.accent}  ⭐ driver rating : ${sb.driverAvg.toFixed(3)}${RESET}`);
+    console.log(`${C.ink}  💰 revenue : ${sb.revenue.toFixed(0)}${RESET}`);
     console.log(`${BOLD}${C.purple}  ★ score ≈ ${score.toFixed(0)}${RESET}  ${C.dim}(Σrating − ${CANCEL_PENALTY}·cancel)`);
   }
   console.log(
-    `${C.dim}  (matcher: ${t.totalAssigned} تخصیصِ کل، ${t.lostToUnreachable} درخواستِ بی‌راننده در طولِ بازی)${RESET}`,
+    `${C.dim}  (matcher: ${t.totalAssigned} total assignments, ${t.lostToUnreachable} driverless requests over the game)${RESET}`,
   );
   process.exit(0);
 }
@@ -697,6 +697,6 @@ process.on("SIGTERM", () => { restoreTerminal(); process.exit(0); });
 
 run().catch((e) => {
   restoreTerminal();
-  console.error("خطا:", e);
+  console.error("Error:", e);
   process.exit(1);
 });

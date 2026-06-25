@@ -1,11 +1,11 @@
-/* صفحهٔ نتایج: جدولِ سشن‌های تمام‌شده از GET /results (مرتب بر اساس درآمد). */
+/* Results page: table of finished sessions from GET /results (sorted by revenue). */
 
 const fmt = (n) => Math.round(Number(n)).toLocaleString("en-US");
 const esc = (s) =>
   String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 function when(ts) {
-  try { return new Date(ts).toLocaleString("fa-IR"); } catch { return ts; }
+  try { return new Date(ts).toLocaleString("en-US"); } catch { return ts; }
 }
 
 function rowHtml(r, i) {
@@ -28,14 +28,14 @@ async function load() {
     const r = await api("/results?limit=100");
     const rows = r.results || [];
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="9" class="empty">هنوز سشنِ تمام‌شده‌ای ذخیره نشده.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" class="empty">No finished sessions saved yet.</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(rowHtml).join("");
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="9" class="empty">خطا در گرفتنِ نتایج (engine بالا نیست؟).</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="empty">Error fetching results (is the engine up?).</td></tr>';
   }
 }
 
 load();
-setInterval(load, 3000); // به‌روزرسانیِ خودکار وقتی سشنِ تازه‌ای تمام می‌شود
+setInterval(load, 3000); // auto-refresh when a new session finishes

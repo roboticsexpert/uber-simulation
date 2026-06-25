@@ -6,9 +6,9 @@ export interface Vec2 {
 export type DriverState = "IDLE" | "ON_TRIP" | "OFFLINE";
 
 export type TripState =
-  | "REQUESTED" // ثبت شده، منتظر تخصیص
-  | "ASSIGNED" // راننده در مسیر رسیدن به مسافر
-  | "IN_TRANSIT" // مسافر سوار، در مسیر مقصد
+  | "REQUESTED" // registered, waiting for assignment
+  | "ASSIGNED" // driver en route to the rider
+  | "IN_TRANSIT" // rider on board, en route to destination
   | "COMPLETED"
   | "CANCELLED";
 
@@ -16,13 +16,13 @@ export interface Driver {
   id: string;
   pos: Vec2;
   state: DriverState;
-  /** سفری که الان رویش کار می‌کند (در ASSIGNED/ON_TRIP). */
+  /** The trip currently being worked on (in ASSIGNED/ON_TRIP). */
   tripId: string | null;
-  /** آخرین tick ای که سفری گرفت (مبنای تایمر خواب). */
+  /** The last tick at which a trip was taken (basis for the sleep timer). */
   lastTripTick: number;
-  /** اگر OFFLINE: tick ای که باید بیدار شود. */
+  /** If OFFLINE: the tick at which the driver should wake up. */
   wakeAtTick: number | null;
-  /** مجموع رِیتینگ‌هایی که از سفرها گرفته (برای نمایش). */
+  /** Sum of ratings received from trips (for display). */
   ratingSum: number;
   ratingCount: number;
 }
@@ -43,7 +43,7 @@ export interface Trip {
   driverRating: number | null;
 }
 
-/** تصویری از دنیا که در هر cycle به Matcher داده می‌شود. */
+/** A snapshot of the world handed to the Matcher each cycle. */
 export interface WorldSnapshot {
   tick: number;
   minute: number;
@@ -66,7 +66,7 @@ export interface WorldSnapshot {
   }[];
 }
 
-/** یک تخصیص که Matcher برمی‌گرداند. */
+/** An assignment returned by the Matcher. */
 export interface Assignment {
   driverId: string;
   tripId: string;

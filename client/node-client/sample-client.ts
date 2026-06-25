@@ -58,6 +58,8 @@ async function main() {
     console.log(`🌍 New world created: ${session} (creator: ${name})`);
   }
 
+  console.log(`👀 Watch your world live:  ${BASE}/world.html?id=${session}`);
+
   const ws = new WebSocket(`${WS_BASE}/sessions/${session}/ws`);
 
   ws.addEventListener("open", () => console.log(`🔌 Socket connected to ${session} — waiting for state…`));

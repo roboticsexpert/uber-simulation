@@ -39,6 +39,15 @@ BASE_URL=http://localhost:8080 SESSION_ID=brave-fox-1 npm start
 | `MATCHER_NAME` | —                       | Display name; required when creating a new world.        |
 | `SESSION_ID`   | —                       | If given, connects to that session instead of creating one. |
 
+## Watch your world live
+
+On start, the client prints a link to your live world — click it to watch your
+drivers, riders, and scoreboard in real time:
+
+```
+👀 Watch your world live:  https://snapp.zisef.ir/world.html?id=brave-fox-1
+```
+
 ## Algorithm
 
 The sample `decide()` uses the simplest possible strategy: it walks the open

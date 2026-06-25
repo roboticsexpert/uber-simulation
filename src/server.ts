@@ -13,9 +13,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, "..", "public");
 
 const store = createStore();
-store.init().catch((e) => console.error("init دیتابیس ناموفق بود:", e));
+store.init().catch((e) => console.error("database init failed:", e));
 const manager = new SessionManager(store);
-// هنگام حذف/پاک‌سازیِ هر سشن (دستی یا خودکارِ پس از پایان)، WebSocketهایش را ببند.
+// When any session is removed/cleaned up (manually or automatically after it ends), close its WebSockets.
 manager.onEvict = (id) => closeSessionSockets(id);
 
 const MIME: Record<string, string> = {
@@ -69,7 +69,7 @@ const server = createServer(async (req, res) => {
   if (method === "OPTIONS") return send(res, 204, {});
 
   try {
-    // ---- /results → نتایجِ آرشیوشدهٔ سشن‌های تمام‌شده (leaderboard) ----
+    // ---- /results → archived results of finished sessions (leaderboard) ----
     if (seg[0] === "results" && seg.length === 1 && method === "GET") {
       const limit = Number(url.searchParams.get("limit")) || 50;
       return send(res, 200, { results: await store.listResults(limit) });
@@ -77,16 +77,16 @@ const server = createServer(async (req, res) => {
 
     // ---- /sessions ----
     if (seg[0] === "sessions") {
-      // GET /sessions → لیست همهٔ دنیاها (vizState کامل هر کدام)
+      // GET /sessions → list all worlds (full vizState for each)
       if (seg.length === 1 && method === "GET") {
         return send(res, 200, { sessions: manager.listViz() });
       }
-      // POST /sessions → ساختِ سشن (با کد، توسطِ matcherِ بیرونی). body: { name }
-      //   سشن خالی و idle ساخته می‌شود؛ با اولین اتصالِ matcher (GET /state یا ws) شروع می‌شود.
+      // POST /sessions → create a session (by code, via an external matcher). body: { name }
+      //   An empty, idle session is created; it starts on the first matcher connection (GET /state or ws).
       if (seg.length === 1 && method === "POST") {
         const body = await readJsonBody(req).catch(() => ({}));
         const name = typeof body.name === "string" ? body.name.trim() : "";
-        if (!name) return send(res, 400, { error: "نام سازنده (name) اجباری است" });
+        if (!name) return send(res, 400, { error: "creator name (name) is required" });
         const { id, engine } = manager.create(name.slice(0, 60));
         return send(res, 201, { id, creator: engine.creator, status: engine.status });
       }
@@ -94,15 +94,15 @@ const server = createServer(async (req, res) => {
       const id = seg[1];
       const engine = id ? manager.get(id) : undefined;
 
-      // DELETE /sessions/:id  (remove() خودش WebSocketها را می‌بندد)
+      // DELETE /sessions/:id  (remove() closes the WebSockets itself)
       if (seg.length === 2 && method === "DELETE") {
         return send(res, manager.remove(id) ? 200 : 404, { removed: id });
       }
-      if (!engine) return send(res, 404, { error: `session ${id} یافت نشد` });
+      if (!engine) return send(res, 404, { error: `session ${id} not found` });
 
       const action = seg[2];
       if (action === "state" && method === "GET") {
-        // اولین خواندنِ state = اتصالِ matcher → سشنِ منتظر را شروع کن
+        // First read of state = matcher connection → start the waiting session
         if (engine.status === "idle") engine.start();
         return send(res, 200, { id, status: engine.status, ...engine.snapshot });
       }
@@ -124,10 +124,10 @@ const server = createServer(async (req, res) => {
         engine.reset();
         return send(res, 200, { id, status: engine.status });
       }
-      return send(res, 404, { error: "route نامعتبر" });
+      return send(res, 404, { error: "invalid route" });
     }
 
-    // ---- فایل‌های استاتیک (UI) ----
+    // ---- static files (UI) ----
     if (method === "GET") return serveStatic(res, url.pathname);
     return send(res, 404, { error: "not found" });
   } catch (err) {
@@ -135,11 +135,11 @@ const server = createServer(async (req, res) => {
   }
 });
 
-// ---- WebSocket برای matcher (به‌جای polling) ----
-// مسیر: ws://host/sessions/:id/ws
-// سرور هر cycle، snapshot را push می‌کند؛ کلاینت پیامِ { tick, assignments } برمی‌گرداند.
+// ---- WebSocket for the matcher (instead of polling) ----
+// path: ws://host/sessions/:id/ws
+// The server pushes a snapshot every cycle; the client replies with a { tick, assignments } message.
 const wss = new WebSocketServer({ noServer: true });
-const wsClients = new Map<string, Set<WebSocket>>(); // sessionId → socketها
+const wsClients = new Map<string, Set<WebSocket>>(); // sessionId → sockets
 
 function broadcast(id: string, payload: unknown): void {
   const set = wsClients.get(id);
@@ -148,7 +148,7 @@ function broadcast(id: string, payload: unknown): void {
   for (const ws of set) if (ws.readyState === ws.OPEN) ws.send(msg);
 }
 
-/** بستن socketهای یک سشن (هنگام حذف). */
+/** Close a session's sockets (on removal). */
 export function closeSessionSockets(id: string): void {
   const set = wsClients.get(id);
   if (!set) return;
@@ -172,11 +172,11 @@ function handleMatcherSocket(ws: WebSocket, id: string, engine: Engine): void {
   if (!set) { set = new Set(); wsClients.set(id, set); }
   set.add(ws);
 
-  // اتصالِ matcher = شروعِ سشنِ منتظر
+  // matcher connection = start the waiting session
   if (engine.status === "idle") engine.start();
-  // هر cycle، snapshot را به همهٔ socketهای این سشن push کن
+  // Every cycle, push the snapshot to all of this session's sockets
   engine.onSnapshot = (snapshot, status) => broadcast(id, { id, status, ...snapshot });
-  // snapshot فعلی را فوراً بفرست تا matcher بلافاصله شروع کند
+  // Send the current snapshot immediately so the matcher can start right away
   ws.send(JSON.stringify({ id, status: engine.status, ...engine.snapshot }));
 
   ws.on("message", (data) => {
@@ -184,7 +184,7 @@ function handleMatcherSocket(ws: WebSocket, id: string, engine: Engine): void {
       const body = JSON.parse(data.toString());
       const assignments: Assignment[] = Array.isArray(body.assignments) ? body.assignments : [];
       engine.submitAssignments(Number(body.tick), assignments);
-    } catch { /* پیام نامعتبر */ }
+    } catch { /* invalid message */ }
   });
   ws.on("close", () => {
     set!.delete(ws);
@@ -193,9 +193,9 @@ function handleMatcherSocket(ws: WebSocket, id: string, engine: Engine): void {
 }
 
 server.listen(config.port, () => {
-  console.log(`🚕 Uber-sim (multi-session) روی http://localhost:${config.port}`);
+  console.log(`🚕 Uber-sim (multi-session) on http://localhost:${config.port}`);
   console.log(`   UI:       http://localhost:${config.port}/`);
-  console.log(`   Sessions: POST /sessions ، GET /sessions`);
-  console.log(`   Matcher:  GET /sessions/:id/state ، POST /sessions/:id/assign`);
-  console.log(`   cycle هر ${config.cycleMs}ms ، session ${config.sessionTicks} cycle`);
+  console.log(`   Sessions: POST /sessions , GET /sessions`);
+  console.log(`   Matcher:  GET /sessions/:id/state , POST /sessions/:id/assign`);
+  console.log(`   cycle every ${config.cycleMs}ms , session ${config.sessionTicks} cycles`);
 });

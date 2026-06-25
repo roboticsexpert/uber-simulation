@@ -1,13 +1,13 @@
 import postgres from "postgres";
 
-/** نتیجهٔ نهاییِ یک سشنِ تمام‌شده — همان چیزی که در دیتابیس آرشیو می‌شود. */
+/** The final result of a finished session — exactly what gets archived in the database. */
 export interface SessionResult {
   id: string;
-  /** نامِ سازندهٔ ماتچر (اجباری). */
+  /** The matcher creator's name (required). */
   creator: string;
-  /** tickِ نهایی (معمولاً برابر sessionTicks). */
+  /** The final tick (usually equal to sessionTicks). */
   ticks: number;
-  /** seedِ سناریو، برای تکرارپذیری/مقایسه. */
+  /** The scenario seed, for reproducibility/comparison. */
   seed: number;
   scoreboard: {
     completed: number;
@@ -20,21 +20,21 @@ export interface SessionResult {
     driverRatingCount: number;
     driverAvg: number;
   };
-  /** snapshot از configِ سشن، برای context. */
+  /** A snapshot of the session config, for context. */
   config: Record<string, number>;
 }
 
 export interface SessionStore {
-  /** ساختِ جدولِ مورد نیاز اگر وجود نداشته باشد. */
+  /** Create the required table if it doesn't exist. */
   init(): Promise<void>;
-  /** آرشیوِ یک سشنِ تمام‌شده (idempotent). */
+  /** Archive a finished session (idempotent). */
   saveResult(result: SessionResult): Promise<void>;
-  /** خواندنِ نتایجِ آرشیوشده برای leaderboard/نمایش. */
+  /** Read archived results for the leaderboard/display. */
   listResults(limit?: number): Promise<Record<string, unknown>[]>;
   close(): Promise<void>;
 }
 
-/** پیاده‌سازیِ Postgres. روی Railway از DATABASE_URLِ تزریق‌شده استفاده می‌کند. */
+/** Postgres implementation. On Railway it uses the injected DATABASE_URL. */
 class PostgresStore implements SessionStore {
   private sql: ReturnType<typeof postgres>;
 
@@ -58,9 +58,9 @@ class PostgresStore implements SessionStore {
         scoreboard  JSONB NOT NULL,
         config      JSONB NOT NULL
       )`;
-    // migrationِ idempotent برای جدول‌هایی که از قبل بدونِ ستونِ creator ساخته شده‌اند.
+    // Idempotent migration for tables that were created earlier without the creator column.
     await this.sql`ALTER TABLE session_results ADD COLUMN IF NOT EXISTS creator TEXT NOT NULL DEFAULT ''`;
-    // ماتچرِ داخلی حذف شد — همهٔ سشن‌ها با ماتچرِ بیرونی کار می‌کنند؛ ستونِ قدیمی را پاک کن.
+    // The internal matcher was removed — all sessions run with an external matcher; drop the old column.
     await this.sql`ALTER TABLE session_results DROP COLUMN IF EXISTS auto_match`;
   }
 
@@ -101,10 +101,10 @@ class PostgresStore implements SessionStore {
   }
 }
 
-/** وقتی DATABASE_URL نباشد (مثلاً لوکال) — هیچ ذخیره‌ای نمی‌کند تا توسعه نشکند. */
+/** When DATABASE_URL is absent (e.g. local) — stores nothing so development doesn't break. */
 class NullStore implements SessionStore {
   async init(): Promise<void> {
-    console.warn("⚠️  DATABASE_URL تنظیم نشده — نتایجِ سشن‌ها ذخیره نمی‌شوند (NullStore).");
+    console.warn("⚠️  DATABASE_URL is not set — session results will not be stored (NullStore).");
   }
   async saveResult(): Promise<void> {}
   async listResults(): Promise<Record<string, unknown>[]> {
@@ -113,7 +113,7 @@ class NullStore implements SessionStore {
   async close(): Promise<void> {}
 }
 
-/** بر اساس وجودِ DATABASE_URL، storeِ مناسب را می‌سازد. */
+/** Builds the appropriate store based on whether DATABASE_URL exists. */
 export function createStore(): SessionStore {
   const url = process.env.DATABASE_URL;
   return url ? new PostgresStore(url) : new NullStore();

@@ -9,7 +9,7 @@ import type {
   WorldSnapshot,
 } from "./types.js";
 
-/** RNG با seed (mulberry32) برای سناریوی تکرارپذیر. */
+/** Seeded RNG (mulberry32) for a reproducible scenario. */
 function makeRng(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
@@ -67,7 +67,7 @@ export class World {
     };
   }
 
-  /** نمونهٔ پواسون با میانگین lambda (الگوریتم Knuth). */
+  /** A Poisson sample with mean lambda (Knuth's algorithm). */
   private poisson(lambda: number): number {
     const L = Math.exp(-lambda);
     let k = 0;
@@ -79,7 +79,7 @@ export class World {
     return k - 1;
   }
 
-  // ---- رابط با Matcher ----
+  // ---- Interface with the Matcher ----
 
   snapshot(): WorldSnapshot {
     const idleDrivers = [...this.drivers.values()]
@@ -114,8 +114,8 @@ export class World {
   }
 
   /**
-   * تخصیص‌های Matcher را اعمال می‌کند. تخصیص‌های نامعتبر بی‌صدا رد می‌شوند.
-   * خروجی: تعداد تخصیص پذیرفته‌شده + خطاهای رد.
+   * Applies the Matcher's assignments. Invalid assignments are silently rejected.
+   * Returns: the number of accepted assignments + rejection errors.
    */
   applyAssignments(assignments: Assignment[]): { accepted: number; rejected: string[] } {
     const rejected: string[] = [];
@@ -126,22 +126,22 @@ export class World {
       const driver = this.drivers.get(a.driverId);
       const trip = this.trips.get(a.tripId);
       if (!driver) {
-        rejected.push(`driver ${a.driverId} ناموجود`);
+        rejected.push(`driver ${a.driverId} does not exist`);
         continue;
       }
       if (!trip) {
-        rejected.push(`trip ${a.tripId} ناموجود`);
+        rejected.push(`trip ${a.tripId} does not exist`);
         continue;
       }
       if (driver.state !== "IDLE" || usedDrivers.has(driver.id)) {
-        rejected.push(`driver ${a.driverId} در دسترس نیست`);
+        rejected.push(`driver ${a.driverId} is not available`);
         continue;
       }
       if (trip.state !== "REQUESTED") {
-        rejected.push(`trip ${a.tripId} دیگر باز نیست`);
+        rejected.push(`trip ${a.tripId} is no longer open`);
         continue;
       }
-      // تخصیص معتبر
+      // valid assignment
       driver.state = "ON_TRIP";
       driver.tripId = trip.id;
       driver.lastTripTick = this.tick;
@@ -154,7 +154,7 @@ export class World {
     return { accepted, rejected };
   }
 
-  // ---- پیشروی یک cycle ----
+  // ---- Advance one cycle ----
 
   step(): void {
     this.tick++;
@@ -180,7 +180,7 @@ export class World {
       if (!arrived) continue;
 
       if (trip.state === "ASSIGNED") {
-        // رسید به مسافر → pickup + محاسبهٔ رِیتینگ‌ها
+        // reached the rider → pickup + compute ratings
         trip.pickedUpTick = this.tick;
         trip.state = "IN_TRANSIT";
         const riderWait = (trip.pickedUpTick - trip.requestedTick) * this.mpt;
@@ -194,7 +194,7 @@ export class World {
         driver.ratingSum += trip.driverRating;
         driver.ratingCount++;
       } else {
-        // رسید به مقصد → پایان سفر
+        // reached the destination → end of trip
         trip.completedTick = this.tick;
         trip.state = "COMPLETED";
         trip.fare = config.baseFare + config.perDistanceFare * distance(trip.origin, trip.destination);
@@ -203,7 +203,7 @@ export class World {
         driver.state = "IDLE";
         driver.tripId = null;
         driver.lastTripTick = this.tick;
-        // سفرِ تمام‌شده دیگر فعال نیست → از Map حذف تا snapshot سبک بماند
+        // a finished trip is no longer active → remove from the Map to keep the snapshot light
         this.trips.delete(trip.id);
       }
     }
@@ -215,7 +215,7 @@ export class World {
       if (trip.state !== "REQUESTED" && trip.state !== "ASSIGNED") continue;
       const waited = (this.tick - trip.requestedTick) * this.mpt;
       if (waited <= config.riderPatienceMinutes) continue;
-      // مسافر صبرش تمام شد و هنوز سوار نشده → کنسل
+      // the rider ran out of patience and still hasn't been picked up → cancel
       trip.state = "CANCELLED";
       this.scoreboard.cancelled++;
       if (trip.driverId) {
@@ -223,13 +223,13 @@ export class World {
         if (driver) {
           driver.state = "IDLE";
           driver.tripId = null;
-          // راننده فعال بوده، پس تایمر خوابش ریست می‌ماند
+          // the driver was active, so its sleep timer stays reset
           driver.lastTripTick = this.tick;
         }
       }
       cancelled.push(trip.id);
     }
-    // سفرهای کنسل‌شده دیگر فعال نیستند → حذف از Map
+    // cancelled trips are no longer active → remove from the Map
     for (const id of cancelled) this.trips.delete(id);
   }
 
@@ -247,7 +247,7 @@ export class World {
         if (driver.wakeAtTick !== null && this.tick >= driver.wakeAtTick) {
           driver.state = "IDLE";
           driver.wakeAtTick = null;
-          driver.lastTripTick = this.tick; // تازه بیدار شده، فوراً نخوابد
+          driver.lastTripTick = this.tick; // just woke up, so it doesn't immediately go back to sleep
         }
       }
     }

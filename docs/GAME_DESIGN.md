@@ -1,220 +1,220 @@
-# مسابقهٔ Matching — شبیه‌سازی Uber
+# Matching Competition — Uber Simulation
 
-> سند طراحی بازی (Game Design Document)
-> نسخه: ۰.۱ — پیش‌نویس اولیه
+> Game Design Document
+> Version: 0.1 — initial draft
 
-## ۱. ایده‌ی کلی
+## 1. Overall Idea
 
-ما یک مسابقهٔ کدنویسی برگزار می‌کنیم. هر شرکت‌کننده فقط و فقط **الگوریتم Matching** را پیاده‌سازی می‌کند:
-تصمیم‌گیری دربارهٔ اینکه «کدام راننده به کدام درخواست سفر اختصاص داده شود».
+We are running a coding competition. Each participant implements only and exactly the **Matching algorithm**:
+deciding "which driver should be assigned to which trip request."
 
-تمام بقیهٔ شبیه‌سازی (دنیا، زمان، حرکت، هزینه، امتیازدهی) را **پلتفرم** اجرا می‌کند. کد شرکت‌کننده‌ها در همان دنیا و با همان ورودی‌ها اجرا می‌شود و در نهایت بر اساس یک **معیار امتیاز مشترک** با هم مقایسه می‌شوند.
+The **platform** runs everything else in the simulation (world, time, movement, fare, scoring). Participants' code runs in the same world with the same inputs and is ultimately compared against others based on a **shared scoring metric**.
 
 ```
 ┌──────────────────────────────────────────┐
-│              پلتفرم (Engine)              │
-│  دنیا، زمان، حرکت رانندگان، هزینه، رِیتینگ │
+│              Platform (Engine)            │
+│  world, time, driver movement, fare, rating │
 │                                            │
-│   هر تیک ──►  ┌────────────────────────┐  │
-│   وضعیت دنیا  │   Matcher شرکت‌کننده     │  │
-│              │  (assignment تولید کن)   │  │
-│   ◄── تخصیص   └────────────────────────┘  │
+│   each tick ─►  ┌────────────────────────┐  │
+│   world state   │  Participant's Matcher  │  │
+│                 │  (produce an assignment) │  │
+│   ◄── assignment └────────────────────────┘  │
 └──────────────────────────────────────────┘
 ```
 
 ---
 
-## ۲. موجودیت‌ها (Entities)
+## 2. Entities
 
-### ۲.۱. راننده (Driver)
+### 2.1. Driver
 
-| ویژگی | توضیح |
+| Property | Description |
 |------|-------|
-| `id` | شناسهٔ یکتا |
-| `location` | موقعیت فعلی روی نقشه |
-| `state` | یکی از سه حالت زیر |
-| `rating` | میانگین امتیازی که از سفرها گرفته (اختیاری برای نمایش) |
+| `id` | Unique identifier |
+| `location` | Current position on the map |
+| `state` | One of the three states below |
+| `rating` | Average rating received from trips (optional, for display) |
 
-**حالت‌های راننده (`state`):**
+**Driver states (`state`):**
 
-- `IDLE` — منتظر سفر است (می‌تواند تخصیص بگیرد)
-- `ON_TRIP` — در حال انجام سفر است (شامل مسیر رفتن به مسافر + مسیر مقصد)
-- `OFFLINE` — غیرفعال / خواب است (نمی‌تواند تخصیص بگیرد)
+- `IDLE` — waiting for a trip (can receive an assignment)
+- `ON_TRIP` — currently on a trip (includes the route to the rider + the route to the destination)
+- `OFFLINE` — inactive / sleeping (cannot receive an assignment)
 
-**رفتار راننده:**
+**Driver behavior:**
 
-- راننده **هر سفری** را که به او بدهیم قبول می‌کند (در این نسخه راننده reject ندارد).
-- اگر راننده در بازهٔ **۳۰ دقیقه** هیچ سفری نگیرد، به حالت `OFFLINE` می‌رود («می‌خوابد»).
-- راننده بعد از **۱ ساعت** خواب دوباره به حالت `IDLE` برمی‌گردد.
+- The driver accepts **every trip** we give them (in this version the driver cannot reject).
+- If a driver gets no trip for **30 minutes**, they go `OFFLINE` ("fall asleep").
+- After **1 hour** of sleep, the driver returns to `IDLE`.
 
-> نکته: تایمر ۳۰ دقیقه از آخرین سفری که گرفته شمرده می‌شود؛ هر سفر جدید آن را ریست می‌کند.
+> Note: the 30-minute timer counts from the last trip taken; every new trip resets it.
 
-### ۲.۲. مسافر (Rider)
+### 2.2. Rider
 
-| ویژگی | توضیح |
+| Property | Description |
 |------|-------|
-| `id` | شناسهٔ یکتا |
-| `location` | موقعیت مبدأ (جایی که درخواست می‌دهد) |
-| `destination` | موقعیت مقصد |
-| `requested_at` | زمان ثبت درخواست |
+| `id` | Unique identifier |
+| `location` | Origin position (where they make the request) |
+| `destination` | Destination position |
+| `requested_at` | Time the request was made |
 
-**رفتار مسافر:**
+**Rider behavior:**
 
-- مسافر یک درخواست سفر با یک **مقصد مشخص** ثبت می‌کند.
-- مسافر حداکثر **۵ دقیقه** صبر می‌کند. این ۵ دقیقه از لحظهٔ **درخواست** تا لحظهٔ **رسیدن راننده به او (pickup)** شمرده می‌شود.
-- اگر تا ۵ دقیقه راننده به او نرسد، **سفر را کنسل می‌کند** — چه اصلاً تخصیص نگرفته باشد، چه راننده تخصیص یافته باشد ولی دیر برسد.
+- A rider submits a trip request with a **specific destination**.
+- A rider waits at most **5 minutes**. These 5 minutes are counted from the moment of the **request** to the moment the **driver reaches them (pickup)**.
+- If the driver does not reach them within 5 minutes, they **cancel the trip** — whether no assignment was ever made, or a driver was assigned but arrives late.
 
-> مثال: اگر در دقیقهٔ ۱ به راننده‌ای وصل شود ولی راننده ۵ دقیقه طول بکشد تا برسد (رسیدن در دقیقهٔ ۶)، مسافر کنسل می‌کند چون از سقف ۵ دقیقه عبور کرده.
+> Example: if at minute 1 they are connected to a driver but the driver takes 5 minutes to arrive (arriving at minute 6), the rider cancels because the 5-minute cap has been exceeded.
 
 ---
 
-## ۳. دنیا و زمان
+## 3. World and Time
 
-### ۳.۱. نقشه و موقعیت (Location)
+### 3.1. Map and Location
 
-- موقعیت هر موجودیت یک نقطه روی نقشه است: `(x, y)`.
-- **فاصله** بین دو نقطه با یک تابع فاصلهٔ مشخص محاسبه می‌شود (پیش‌فرض پیشنهادی: فاصلهٔ اقلیدسی).
-- **زمان سفر** = فاصله ÷ سرعت راننده. (سرعت ثابت و یکسان برای همهٔ رانندگان فرض می‌شود.)
+- Each entity's position is a point on the map: `(x, y)`.
+- The **distance** between two points is computed with a defined distance function (suggested default: Euclidean distance).
+- **Trip time** = distance ÷ driver speed. (A constant, identical speed is assumed for all drivers.)
 
-> 🔧 پارامتر باز: مدل نقشه (مختصات پیوسته یا grid) و تابع فاصله (اقلیدسی یا منهتن) باید در سند پلتفرم قطعی شود — بخش ۷.
+> 🔧 Open parameter: the map model (continuous coordinates or grid) and the distance function (Euclidean or Manhattan) should be finalized in the platform document — section 7.
 
-### ۳.۲. زمان شبیه‌سازی
+### 3.2. Simulation Time
 
-- شبیه‌سازی به صورت **تیک (tick)** های گسسته پیش می‌رود؛ هر تیک یک واحد زمانی است.
-- واحد منطقی زمان «دقیقه» است (تمام قوانین بالا با دقیقه بیان شده‌اند).
-- در هر تیک:
-  1. پلتفرم وضعیت دنیا را به Matcher می‌دهد.
-  2. Matcher تخصیص‌ها را برمی‌گرداند.
-  3. پلتفرم رانندگان را حرکت می‌دهد، رسیدن‌ها/کنسل‌ها/کامل‌شدن‌ها را پردازش می‌کند، امتیازها را ثبت می‌کند.
+- The simulation advances in discrete **ticks**; each tick is one unit of time.
+- The logical unit of time is the "minute" (all the rules above are expressed in minutes).
+- On each tick:
+  1. The platform gives the world state to the Matcher.
+  2. The Matcher returns the assignments.
+  3. The platform moves the drivers, processes arrivals/cancellations/completions, and records the scores.
 
 ---
 
-## ۴. چرخهٔ یک سفر (Trip Lifecycle)
+## 4. Trip Lifecycle
 
 ```
-REQUESTED ──(تخصیص توسط Matcher)──► ASSIGNED ──(راننده به مسافر رسید)──► PICKED_UP
+REQUESTED ──(assignment by Matcher)──► ASSIGNED ──(driver reached rider)──► PICKED_UP
    │                                     │                                  │
-   │ ۵ دقیقه گذشت بدون pickup             │ ۵ دقیقه از درخواست گذشت           │
+   │ 5 minutes passed without pickup     │ 5 minutes passed since request   │
    ▼                                     ▼                                  ▼
 CANCELLED                            CANCELLED                          IN_TRANSIT ──► COMPLETED
 ```
 
-- **REQUESTED**: درخواست ثبت شده، منتظر تخصیص.
-- **ASSIGNED**: راننده‌ای اختصاص یافته و در مسیر رسیدن به مسافر است.
-- **PICKED_UP / IN_TRANSIT**: مسافر سوار شده، راننده به سمت مقصد می‌رود.
-- **COMPLETED**: سفر به مقصد رسید.
-- **CANCELLED**: مسافر قبل از pickup منصرف شد (سقف ۵ دقیقه).
+- **REQUESTED**: request submitted, waiting for assignment.
+- **ASSIGNED**: a driver has been assigned and is en route to the rider.
+- **PICKED_UP / IN_TRANSIT**: the rider is on board, the driver heads toward the destination.
+- **COMPLETED**: the trip reached the destination.
+- **CANCELLED**: the rider gave up before pickup (the 5-minute cap).
 
 ---
 
-## ۵. هزینه و امتیازدهی
+## 5. Fare and Scoring
 
-### ۵.۱. هزینهٔ سفر (Fare)
+### 5.1. Trip Fare
 
 ```
-fare = BASE_FARE + (PER_DISTANCE × distance(مبدأ, مقصد))
+fare = BASE_FARE + (PER_DISTANCE × distance(origin, destination))
 ```
 
-- `BASE_FARE`: هزینهٔ ثابت اولیهٔ هر سفر.
-- `PER_DISTANCE`: ضریب هزینه به ازای هر واحد فاصله.
-- `distance(مبدأ, مقصد)`: فاصلهٔ بین نقطهٔ مبدأ و مقصد (نه شامل مسیر رسیدن راننده به مسافر).
+- `BASE_FARE`: the fixed base cost of each trip.
+- `PER_DISTANCE`: cost coefficient per unit of distance.
+- `distance(origin, destination)`: the distance between the origin and destination points (not including the driver's route to the rider).
 
-### ۵.۲. امتیاز مسافر به سفر (Rider Rating)
+### 5.2. Rider Rating of the Trip (Rider Rating)
 
-بر اساس **زمان انتظار** = از لحظهٔ درخواست تا لحظهٔ رسیدن راننده (pickup):
+Based on **wait time** = from the moment of the request to the moment the driver arrives (pickup):
 
-| زمان انتظار | امتیاز |
+| Wait time | Rating |
 |------------|:-----:|
-| کمتر از ۱ دقیقه | ⭐ ۵ |
-| تا ۲ دقیقه | ⭐ ۴ |
-| تا ۳ دقیقه | ⭐ ۳ |
-| تا ۴ دقیقه | ⭐ ۲ |
-| بیشتر از ۴ دقیقه | ⭐ ۱ |
+| Less than 1 minute | ⭐ 5 |
+| Up to 2 minutes | ⭐ 4 |
+| Up to 3 minutes | ⭐ 3 |
+| Up to 4 minutes | ⭐ 2 |
+| More than 4 minutes | ⭐ 1 |
 
-> سفرهای کنسل‌شده هرگز به مرحلهٔ pickup نمی‌رسند، پس امتیاز رِیتینگ ندارند (بخش ۶ تکلیف امتیاز مسابقه‌شان را روشن می‌کند).
+> Cancelled trips never reach the pickup stage, so they have no rating (section 6 clarifies how they affect the competition score).
 
-### ۵.۳. امتیاز راننده به سفر (Driver Rating)
+### 5.3. Driver Rating of the Trip (Driver Rating)
 
-بر اساس **زمان رسیدن راننده به مسافر** = از لحظهٔ تخصیص تا لحظهٔ pickup:
+Based on the **driver's arrival time to the rider** = from the moment of assignment to the moment of pickup:
 
-| زمان رسیدن | امتیاز |
+| Arrival time | Rating |
 |------------|:-----:|
-| کمتر از ۱ دقیقه | ⭐ ۵ |
-| تا ۲ دقیقه | ⭐ ۴ |
-| تا ۳ دقیقه | ⭐ ۳ |
-| تا ۴ دقیقه | ⭐ ۲ |
-| بیشتر از ۵ دقیقه | ⭐ ۱ |
+| Less than 1 minute | ⭐ 5 |
+| Up to 2 minutes | ⭐ 4 |
+| Up to 3 minutes | ⭐ 3 |
+| Up to 4 minutes | ⭐ 2 |
+| More than 5 minutes | ⭐ 1 |
 
-**تفاوت کلیدی دو رِیتینگ:**
-- رِیتینگ مسافر از لحظهٔ **درخواست** شمرده می‌شود (شامل تأخیر matching + مسیر رسیدن).
-- رِیتینگ راننده از لحظهٔ **تخصیص** شمرده می‌شود (فقط مسیر رسیدن).
+**Key difference between the two ratings:**
+- The rider rating is counted from the moment of the **request** (includes matching delay + arrival route).
+- The driver rating is counted from the moment of **assignment** (only the arrival route).
 
-پس یک Matcher خوب باید هم سریع تخصیص بدهد (به‌نفع مسافر) و هم نزدیک‌ترین راننده را انتخاب کند (به‌نفع هر دو).
+So a good Matcher must both assign quickly (in the rider's favor) and pick the nearest driver (in favor of both).
 
 ---
 
-## ۶. هدف مسابقه و معیار امتیاز
+## 6. Competition Goal and Scoring Metric
 
-هدف شرکت‌کننده: نوشتن Matcher ای که در طول یک سناریوی مشخص **بهترین کیفیت سرویس** را بسازد.
+The participant's goal: write a Matcher that produces the **best service quality** over a given scenario.
 
-سیگنال‌هایی که می‌توان امتیاز مسابقه را از آن‌ها ساخت:
+Signals from which the competition score can be built:
 
-- تعداد سفرهای **تکمیل‌شده** (هرچه بیشتر بهتر).
-- تعداد سفرهای **کنسل‌شده** (هرچه کمتر بهتر).
-- مجموع/میانگین **رِیتینگ مسافر**.
-- مجموع/میانگین **رِیتینگ راننده**.
-- (اختیاری) مجموع **درآمد** (fare سفرهای کامل).
+- The number of **completed** trips (the more the better).
+- The number of **cancelled** trips (the fewer the better).
+- The sum/average of the **rider rating**.
+- The sum/average of the **driver rating**.
+- (Optional) The total **revenue** (fare of completed trips).
 
-> 🔧 تصمیم باز: فرمول دقیق امتیاز نهایی مسابقه باید نهایی شود. یک پیشنهاد ساده:
+> 🔧 Open decision: the exact formula for the final competition score must be finalized. One simple proposal:
 > ```
-> score = Σ(rider_rating + driver_rating برای سفرهای کامل) − (PENALTY × تعداد کنسل)
+> score = Σ(rider_rating + driver_rating for completed trips) − (PENALTY × number of cancellations)
 > ```
-> این در بخش ۷ به‌عنوان تصمیم باز علامت خورده.
+> This is marked as an open decision in section 7.
 
-برای **عادلانه‌بودن**، همهٔ شرکت‌کننده‌ها روی **سناریوهای یکسان** (همان توالی درخواست‌ها، همان موقعیت اولیهٔ رانندگان، همان seed تصادفی) اجرا می‌شوند.
+For **fairness**, all participants run on **identical scenarios** (the same request sequence, the same initial driver positions, the same random seed).
 
 ---
 
-## ۷. پارامترها و تصمیم‌های باز (برای سند پلتفرم)
+## 7. Parameters and Open Decisions (for the Platform Document)
 
-این موارد عمداً در طراحی بازی باز مانده‌اند و باید هنگام ساخت پلتفرم قطعی شوند:
+These items were intentionally left open in the game design and must be finalized when building the platform:
 
-| # | مورد | پیشنهاد پیش‌فرض |
+| # | Item | Suggested Default |
 |---|------|----------------|
-| ۱ | مدل نقشه (پیوسته vs grid) و تابع فاصله | مختصات پیوسته + فاصلهٔ اقلیدسی |
-| ۲ | سرعت راننده (واحد فاصله بر دقیقه) | باید مقدار بگیرد |
-| ۳ | `BASE_FARE` و `PER_DISTANCE` | باید مقدار بگیرد |
-| ۴ | طول تیک (هر تیک چند دقیقه) | ۱ تیک = ۱ دقیقه (یا ریزتر برای دقت) |
-| ۵ | منطق دقیق آستانه‌ها (`<` vs `≤`) در رِیتینگ | جدول‌های بخش ۵ مرجع‌اند؛ مرزها باید کد-دقیق شوند |
-| ۶ | فرمول نهایی امتیاز مسابقه + `PENALTY` کنسل | بخش ۶ |
-| ۷ | نحوهٔ تولید درخواست‌ها و سناریوها (نرخ ورود، توزیع موقعیت) | باید طراحی شود |
-| ۸ | آیا یک راننده می‌تواند هم‌زمان چند تخصیص داشته باشد؟ | خیر — هر راننده یک سفر |
-| ۹ | محدودیت زمان/منابع اجرای کد Matcher در هر تیک | باید مقدار بگیرد |
-| ۱۰ | رفتار رِیتینگ راننده برای آستانهٔ «۴ تا ۵ دقیقه» (در شرح اصلی صریح نبود) | فرض: ۴ تا ۵ → ۱ ستاره، مطابق روند |
+| 1 | Map model (continuous vs grid) and distance function | continuous coordinates + Euclidean distance |
+| 2 | Driver speed (distance units per minute) | must be set to a value |
+| 3 | `BASE_FARE` and `PER_DISTANCE` | must be set to a value |
+| 4 | Tick length (how many minutes per tick) | 1 tick = 1 minute (or finer for precision) |
+| 5 | Exact threshold logic (`<` vs `≤`) in the ratings | the tables in section 5 are the reference; boundaries must be made code-exact |
+| 6 | Final competition score formula + cancellation `PENALTY` | section 6 |
+| 7 | How requests and scenarios are generated (arrival rate, position distribution) | must be designed |
+| 8 | Can a single driver have multiple assignments at once? | No — one trip per driver |
+| 9 | Time/resource limit for running Matcher code per tick | must be set to a value |
+| 10 | Driver rating behavior for the "4 to 5 minutes" threshold (not explicit in the original description) | assumption: 4 to 5 → 1 star, following the trend |
 
 ---
 
-## ۸. قرارداد رابط Matcher (پیش‌نویس مفهومی)
+## 8. Matcher Interface Contract (Conceptual Draft)
 
-این صرفاً شکل مفهومی است؛ امضای دقیق در سند پلتفرم تعریف می‌شود.
+This is merely the conceptual shape; the exact signature is defined in the platform document.
 
-**ورودی هر فراخوانی (در هر تیک):**
-- زمان فعلی شبیه‌سازی.
-- فهرست رانندگان `IDLE` با `id` و `location`.
-- فهرست درخواست‌های باز (`REQUESTED`) با `id`، `location` (مبدأ)، `destination`، `requested_at`.
+**Input of each call (on each tick):**
+- The current simulation time.
+- The list of `IDLE` drivers with their `id` and `location`.
+- The list of open requests (`REQUESTED`) with `id`, `location` (origin), `destination`, `requested_at`.
 
-**خروجی:**
-- فهرستی از جفت‌های `(driver_id, request_id)` به‌عنوان تخصیص.
-- پلتفرم تخصیص‌های نامعتبر (راننده مشغول، درخواست منقضی، تخصیص تکراری) را رد می‌کند.
+**Output:**
+- A list of `(driver_id, request_id)` pairs as assignments.
+- The platform rejects invalid assignments (busy driver, expired request, duplicate assignment).
 
 ---
 
-## ۹. خلاصهٔ قوانین (Cheat Sheet)
+## 9. Rules Summary (Cheat Sheet)
 
-- ۳ حالت راننده: `IDLE` / `ON_TRIP` / `OFFLINE`.
-- راننده هر سفری را قبول می‌کند.
-- بدون سفر در ۳۰ دقیقه → خواب؛ بعد از ۱ ساعت بیداری.
-- مسافر سقف انتظار ۵ دقیقه (درخواست تا pickup) دارد؛ بعدش کنسل.
-- `fare = BASE_FARE + PER_DISTANCE × فاصلهٔ مبدأ تا مقصد`.
-- رِیتینگ مسافر: تابع زمان (درخواست→pickup)؛ ۵→۴→۳→۲→۱ به‌ازای ۱→۲→۳→۴→بیشتر دقیقه.
-- رِیتینگ راننده: تابع زمان (تخصیص→pickup)؛ ۵→۴→۳→۲→۱ به‌ازای ۱→۲→۳→۴→۵+ دقیقه.
+- 3 driver states: `IDLE` / `ON_TRIP` / `OFFLINE`.
+- The driver accepts every trip.
+- No trip for 30 minutes → sleep; awake after 1 hour.
+- The rider has a 5-minute wait cap (request to pickup); after that, cancel.
+- `fare = BASE_FARE + PER_DISTANCE × distance from origin to destination`.
+- Rider rating: a function of time (request→pickup); 5→4→3→2→1 for 1→2→3→4→more minutes.
+- Driver rating: a function of time (assignment→pickup); 5→4→3→2→1 for 1→2→3→4→5+ minutes.

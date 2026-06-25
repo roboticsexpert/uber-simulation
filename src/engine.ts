@@ -5,23 +5,23 @@ import type { Assignment, WorldSnapshot } from "./types.js";
 export type SessionStatus = "idle" | "running" | "finished";
 
 /**
- * مدیریت یک session: حلقهٔ cycle، زمان‌بندی، و بافر تخصیص‌ها.
+ * Manages a single session: the cycle loop, scheduling, and the assignments buffer.
  *
- * جریان هر cycle (هر `cycleMs`):
- *   1. تخصیص‌های دریافت‌شده برای snapshot فعلی اعمال می‌شوند.
- *   2. دنیا یک قدم جلو می‌رود (حرکت، pickup، کنسل، خواب، تولید درخواست).
- *   3. snapshot جدید منتشر می‌شود تا Matcher رویش کار کند.
+ * Flow of each cycle (every `cycleMs`):
+ *   1. The received assignments for the current snapshot are applied.
+ *   2. The world advances one step (movement, pickup, cancellation, sleep, request generation).
+ *   3. A new snapshot is published for the Matcher to work on.
  */
 export class Engine {
   world = new World();
   status: SessionStatus = "idle";
   snapshot: WorldSnapshot = this.world.snapshot();
   lastResult: { accepted: number; rejected: string[] } = { accepted: 0, rejected: [] };
-  /** نامِ سازندهٔ ماتچر — اجباری، هنگام ساختِ سشن ست می‌شود. */
+  /** Name of the matcher's creator — required, set when the session is created. */
   creator = "";
-  /** هر cycle با snapshot جدید صدا زده می‌شود (برای push روی WebSocket). */
+  /** Called each cycle with the new snapshot (for pushing over the WebSocket). */
   onSnapshot?: (snapshot: WorldSnapshot, status: SessionStatus) => void;
-  /** یک‌بار وقتی سشن به finished می‌رسد صدا زده می‌شود (برای آرشیو در دیتابیس). */
+  /** Called once when the session reaches finished (for archiving in the database). */
   onFinish?: () => void;
 
   private pending: Assignment[] = [];
@@ -31,13 +31,13 @@ export class Engine {
     if (this.status === "running") return;
     this.reset();
     this.status = "running";
-    // یک قدم اولیه تا اولین درخواست‌ها ساخته شوند
+    // An initial step so the first requests get generated
     this.world.step();
     this.snapshot = this.world.snapshot();
     this.timer = setInterval(() => this.cycle(), config.cycleMs);
   }
 
-  /** فقط حلقهٔ cycle را متوقف می‌کند (بدون ساختِ دنیای جدید) — برای حذف/پاک‌سازیِ سشن. */
+  /** Only stops the cycle loop (without creating a new world) — for removing/cleaning up the session. */
   stop(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
@@ -53,16 +53,16 @@ export class Engine {
     this.status = "idle";
   }
 
-  /** تخصیص‌های Matcher برای snapshot جاری. آخرین POST کل مجموعه را تعیین می‌کند. */
+  /** The Matcher's assignments for the current snapshot. The last POST determines the whole set. */
   submitAssignments(tick: number, assignments: Assignment[]): { ok: boolean; message: string } {
     if (this.status !== "running") {
-      return { ok: false, message: "session در حال اجرا نیست" };
+      return { ok: false, message: "session is not running" };
     }
     if (tick !== this.snapshot.tick) {
-      return { ok: false, message: `tick قدیمی است (الان ${this.snapshot.tick})` };
+      return { ok: false, message: `tick is outdated (now ${this.snapshot.tick})` };
     }
     this.pending = assignments;
-    return { ok: true, message: `${assignments.length} تخصیص دریافت شد` };
+    return { ok: true, message: `${assignments.length} assignments received` };
   }
 
   private cycle(): void {
@@ -74,12 +74,12 @@ export class Engine {
       this.status = "finished";
       if (this.timer) clearInterval(this.timer);
       this.timer = null;
-      this.onFinish?.(); // سشن تمام شد → آرشیوِ نتیجه در دیتابیس
+      this.onFinish?.(); // session finished → archive the result in the database
     }
-    this.onSnapshot?.(this.snapshot, this.status); // push به matcherهای متصل با WebSocket
+    this.onSnapshot?.(this.snapshot, this.status); // push to matchers connected via WebSocket
   }
 
-  /** وضعیت کامل برای UI (همهٔ رانندگان + سفرهای فعال + جدول امتیاز). */
+  /** Full state for the UI (all drivers + active trips + scoreboard). */
   vizState() {
     const w = this.world;
     return {
@@ -89,7 +89,7 @@ export class Engine {
       minute: w.minute,
       sessionTicks: config.sessionTicks,
       cycleMs: config.cycleMs,
-      /** مسافتی که هر راننده در یک cycle طی می‌کند — برای پیش‌بینیِ دقیقِ انیمیشن در UI. */
+      /** Distance each driver travels in one cycle — for accurate animation prediction in the UI. */
       stepPerCycle: config.driverSpeed * config.minutesPerTick,
       world: { width: config.worldWidth, height: config.worldHeight },
       lastResult: this.lastResult,

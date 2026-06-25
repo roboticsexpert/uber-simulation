@@ -1,28 +1,30 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════════════╗
- * ║  PROFIT MATCHER — مدلِ فکری «سوداگر» (throughput / ROI)                    ║
+ * ║  PROFIT MATCHER — the "trader" mindset (throughput / ROI)                  ║
  * ╚══════════════════════════════════════════════════════════════════════════╝
  *
- * فلسفهٔ تصمیم: مثلِ یک کارخانه‌دار که می‌خواهد ناوگانش بیشترین «چرخش» را داشته
- * باشد. کلیدِ بُرد در کلِ بازی این نیست که یک سفرِ تک را بهینه کنی، بلکه این است
- * که هر راننده هرچه زودتر آزاد شود تا سفرِ بعدی را بگیرد. پس هر جفتِ (راننده،
- * درخواست) با «نرخِ سود» سنجیده می‌شود:
+ * Decision philosophy: like a factory owner who wants the fleet to have the
+ * highest "turnover". The key to winning the whole game isn't to optimize a
+ * single trip, but to free each driver as soon as possible so they can pick up
+ * the next trip. So each (driver, request) pair is judged by its "profit rate":
  *
- *     rate = درآمدِ سفر ÷ (tickهای پیکاپ + tickهای خودِ سفر)
- *          = سود به ازای هر tickِ اشغالِ راننده
+ *     rate = trip revenue ÷ (pickup ticks + the trip's own ticks)
+ *          = profit per tick the driver is occupied
  *
- * سپس جفت‌ها را به ترتیبِ نزولیِ rate حریصانه برمی‌داریم (هر راننده/درخواست یک‌بار).
- * نتیجه: اولویت با سفرهایی که راننده را سریع آزاد می‌کنند و درآمدِ خوبی دارند ⟶
- * بیشترین تعدادِ سفر و درآمد در طولِ session.
+ * Then we greedily take the pairs in descending order of rate (each
+ * driver/request once). Result: priority goes to trips that free the driver
+ * quickly and earn good revenue ⟶ the most trips and revenue over the session.
  *
- * تفاوت با triage:  تریاژ دنبالِ نجاتِ فوری‌ترین مسافر است؛ profit به فوریت کاری
- *                   ندارد و دنبالِ بهره‌وریِ ناوگان است (ممکن است مسافرِ دور را رها
- *                   کند تا دو مسافرِ نزدیک را سرویس کند).
- * تفاوت با smart:   smart اول «تعدادِ تکمیل» را lexicographic بیشینه می‌کند؛
- *                   profit مستقیماً درآمد/زمانِ ناوگان را هدف می‌گیرد (حریصانه).
+ * Difference from triage:  triage tries to rescue the most urgent rider; profit
+ *                          doesn't care about urgency and chases fleet
+ *                          efficiency (it may drop a faraway rider to serve two
+ *                          nearby ones).
+ * Difference from smart:   smart first maximizes "completion count"
+ *                          lexicographically; profit directly targets
+ *                          revenue/fleet-time (greedily).
  *
- * اجرا:  MATCHER_NAME="سوداگر" npm run client:profit
- *        BASE_URL=http://host:8080 SESSION_ID=brave-fox-1 npm run client:profit
+ * Run:  MATCHER_NAME="Profit" npm run client:profit
+ *       BASE_URL=http://host:8080 SESSION_ID=brave-fox-1 npm run client:profit
  */
 
 const BASE = process.env.BASE_URL ?? "http://localhost:8080";
@@ -55,7 +57,7 @@ interface Assignment { driverId: string; tripId: string; }
 
 const dist = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.y - b.y);
 
-/** ----- منطقِ سوداگر ----- */
+/** ----- Trader logic ----- */
 function decide(state: State): Assignment[] {
   const { idleDrivers, openRequests, config } = state;
   if (idleDrivers.length === 0 || openRequests.length === 0) return [];
@@ -64,25 +66,25 @@ function decide(state: State): Assignment[] {
   const step = config.driverSpeed * mpt;
   const patience = config.riderPatienceMinutes;
 
-  // همهٔ جفت‌های feasible را با نرخِ سود بساز.
+  // Build all feasible pairs with their profit rate.
   interface Pair { driverId: string; tripId: string; rate: number; pickup: number; }
   const pairs: Pair[] = [];
   for (const d of idleDrivers) {
     for (const r of openRequests) {
       const Dp = dist(d.pos, r.origin);
       const pickupTicks = Math.max(1, Math.ceil(Dp / step));
-      // فقط جفتِ شدنی: راننده باید پیش از کنسلِ مسافر برسد.
+      // Only feasible pairs: the driver must arrive before the rider cancels.
       if (r.waitedMinutes + (pickupTicks - 1) * mpt > patience + 1e-9) continue;
 
       const Dt = dist(r.origin, r.destination);
       const tripTicks = Math.max(1, Math.ceil(Dt / step));
       const revenue = config.baseFare + config.perDistanceFare * Dt;
-      const busyTicks = pickupTicks + tripTicks; // مدتِ اشغالِ راننده
+      const busyTicks = pickupTicks + tripTicks; // how long the driver is occupied
       pairs.push({ driverId: d.id, tripId: r.id, rate: revenue / busyTicks, pickup: Dp });
     }
   }
 
-  // پرسودترین به ازای زمانِ ناوگان اول؛ در تساوی، پیکاپِ کوتاه‌تر (آزادسازیِ سریع‌تر).
+  // Most profitable per fleet-time first; on a tie, shorter pickup (faster to free up).
   pairs.sort((a, b) => b.rate - a.rate || a.pickup - b.pickup);
 
   const usedDrivers = new Set<string>();
@@ -100,9 +102,9 @@ function decide(state: State): Assignment[] {
 
 async function ensureSession(): Promise<string> {
   if (process.env.SESSION_ID) return process.env.SESSION_ID;
-  const name = (process.env.MATCHER_NAME ?? "").trim();
+  const name = (process.env.MATCHER_NAME ?? "Profit").trim();
   if (!name) {
-    console.error('❌ MATCHER_NAME اجباری است. مثال:  MATCHER_NAME="سوداگر" npm run client:profit');
+    console.error('❌ MATCHER_NAME is required. Example:  MATCHER_NAME="Trader" npm run client:profit');
     process.exit(1);
   }
   const r = await fetch(`${BASE}/sessions`, {
@@ -110,7 +112,7 @@ async function ensureSession(): Promise<string> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name }),
   }).then((x) => x.json());
-  console.log(`🌍 دنیای جدید ساخته شد: ${r.id} (سازنده: ${name})`);
+  console.log(`🌍 New world created: ${r.id} (creator: ${name})`);
   return r.id as string;
 }
 
@@ -118,14 +120,14 @@ async function main() {
   const session = await ensureSession();
   const ws = new WebSocket(`${WS_BASE}/sessions/${session}/ws`);
 
-  ws.addEventListener("open", () => console.log(`💰 PROFIT به ${session} وصل شد — بیشینهٔ سود/زمانِ ناوگان`));
-  ws.addEventListener("error", (e: any) => console.error("خطای سوکت:", e?.message ?? e));
-  ws.addEventListener("close", () => console.log("سوکت بسته شد."));
+  ws.addEventListener("open", () => console.log(`💰 PROFIT connected to ${session} — maximizing profit/fleet-time`));
+  ws.addEventListener("error", (e: any) => console.error("Socket error:", e?.message ?? e));
+  ws.addEventListener("close", () => console.log("Socket closed."));
 
   ws.addEventListener("message", (ev: any) => {
     const state: State = JSON.parse(ev.data as string);
     if (state.status === "finished") {
-      console.log(`🏁 session ${session} تمام شد.`);
+      console.log(`🏁 session ${session} finished.`);
       ws.close();
       process.exit(0);
     }
@@ -134,7 +136,7 @@ async function main() {
     ws.send(JSON.stringify({ tick: state.tick, assignments }));
     console.log(
       `tick ${String(state.tick).padStart(3)}/${state.sessionTicks} │ ` +
-        `${state.openRequests.length} req، ${state.idleDrivers.length} idle → ${assignments.length} سفرِ پرسود`,
+        `${state.openRequests.length} req, ${state.idleDrivers.length} idle → ${assignments.length} profitable trips`,
     );
   });
 }

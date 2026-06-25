@@ -1,6 +1,6 @@
 import type { Vec2 } from "./types.js";
 
-/** فاصلهٔ اقلیدسی بین دو نقطه. */
+/** Euclidean distance between two points. */
 export function distance(a: Vec2, b: Vec2): number {
   const dx = a.x - b.x;
   const dy = a.y - b.y;
@@ -8,9 +8,9 @@ export function distance(a: Vec2, b: Vec2): number {
 }
 
 /**
- * نقطه‌ای را به اندازهٔ `maxStep` به سمت `target` حرکت می‌دهد.
- * اگر فاصله کمتر از یک قدم باشد، دقیقاً روی هدف می‌نشیند.
- * خروجی: { pos: موقعیت جدید, arrived: آیا رسید }
+ * Moves a point toward `target` by at most `maxStep`.
+ * If the distance is less than one step, it lands exactly on the target.
+ * Returns: { pos: new position, arrived: whether it reached the target }
  */
 export function moveToward(
   from: Vec2,
@@ -29,8 +29,8 @@ export function moveToward(
 }
 
 /**
- * رِیتینگ بر اساس زمان (دقیقه) طبق جدول بازی:
- *   < 1 → 5 ، ≤ 2 → 4 ، ≤ 3 → 3 ، ≤ 4 → 2 ، بیشتر → 1
+ * Rating based on time (minutes) per the game's table:
+ *   < 1 → 5, ≤ 2 → 4, ≤ 3 → 3, ≤ 4 → 2, more → 1
  */
 export function ratingFromMinutes(minutes: number): number {
   if (minutes < 1) return 5;

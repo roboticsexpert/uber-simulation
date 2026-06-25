@@ -4,7 +4,7 @@ import type { SessionResult, SessionStore } from "./store.js";
 
 const MAX_SESSIONS = 16;
 
-// اجزای اسم‌های رندومِ خوانا (ASCII، مناسبِ URL و SESSION_ID)
+// Parts for readable random names (ASCII, suitable for URLs and SESSION_ID)
 const ADJ = ["brave", "calm", "swift", "lucky", "bold", "wise", "keen", "wild", "fancy", "noble", "quiet", "sunny", "merry", "clever", "jolly", "spry"];
 const NOUN = ["fox", "otter", "hawk", "wolf", "lynx", "puma", "crane", "raven", "tiger", "panda", "moose", "bison", "heron", "koala", "gecko", "ibex"];
 
@@ -16,31 +16,31 @@ function randomName(): string {
 }
 
 /**
- * چندین Engine مستقل را هم‌زمان نگه می‌دارد.
- * همهٔ سشن‌ها از یک config سراسری (همان seed و پارامترها) استفاده می‌کنند،
- * پس دنیای اولیه و تقاضای یکسانی دارند؛ تنها تفاوت‌شان از تصمیمِ Matcher می‌آید.
+ * Keeps several independent Engines running at the same time.
+ * All sessions use one global config (the same seed and parameters),
+ * so they have the same initial world and demand; their only difference comes from the Matcher's decisions.
  */
 export class SessionManager {
   private sessions = new Map<string, Engine>();
-  /** تایمرهای پاک‌سازیِ سشن‌های تمام‌شده — تا هنگام حذفِ زودهنگام لغوشان کنیم. */
+  /** Cleanup timers for finished sessions — so we can cancel them on early removal. */
   private evictionTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  /** هنگام حذفِ سشن صدا زده می‌شود (مثلاً برای بستنِ WebSocketها). */
+  /** Called when a session is removed (e.g. to close its WebSockets). */
   onEvict?: (id: string) => void;
 
   constructor(private store: SessionStore) {}
 
   create(name: string): { id: string; engine: Engine } {
     if (this.sessions.size >= MAX_SESSIONS) {
-      throw new Error(`سقفِ ${MAX_SESSIONS} سشن پر است`);
+      throw new Error(`the limit of ${MAX_SESSIONS} sessions is full`);
     }
     let id = randomName();
-    while (this.sessions.has(id)) id = randomName(); // جلوگیری از تصادم
+    while (this.sessions.has(id)) id = randomName(); // avoid collisions
     const engine = new Engine();
-    engine.creator = name; // نامِ سازنده (اجباری)
-    // وقتی سشن تمام شد: نتیجه را آرشیو کن، سپس برای آزادسازیِ حافظه از Map پاکش کن.
+    engine.creator = name; // creator's name (required)
+    // When the session finishes: archive the result, then remove it from the Map to free memory.
     engine.onFinish = () => {
       this.store.saveResult(this.buildResult(id, engine)).catch((e) =>
-        console.error(`ذخیرهٔ نتیجهٔ سشن ${id} ناموفق بود:`, e),
+        console.error(`failed to save result for session ${id}:`, e),
       );
       this.scheduleEviction(id);
     };
@@ -49,11 +49,11 @@ export class SessionManager {
   }
 
   /**
-   * سشنِ تمام‌شده را پس از یک مهلت از حافظه پاک می‌کند تا نشتی نداشته باشیم.
-   * مهلت فرصت می‌دهد UI وضعیتِ نهایی را نشان دهد؛ با ttl=0 حذف فوری است.
+   * Removes a finished session from memory after a grace period so we don't leak.
+   * The grace period gives the UI a chance to show the final state; with ttl=0 removal is immediate.
    */
   private scheduleEviction(id: string): void {
-    if (this.evictionTimers.has(id)) return; // قبلاً زمان‌بندی شده
+    if (this.evictionTimers.has(id)) return; // already scheduled
     const ttl = config.finishedSessionTtlMs;
     if (ttl <= 0) {
       this.remove(id);
@@ -63,11 +63,11 @@ export class SessionManager {
       this.evictionTimers.delete(id);
       this.remove(id);
     }, ttl);
-    timer.unref?.(); // نگذار این تایمر مانع خاموش‌شدنِ پروسه شود
+    timer.unref?.(); // don't let this timer keep the process from shutting down
     this.evictionTimers.set(id, timer);
   }
 
-  /** نتیجهٔ نهاییِ سشن را از وضعیتِ فعلیِ engine می‌سازد. */
+  /** Builds the session's final result from the engine's current state. */
   private buildResult(id: string, engine: Engine): SessionResult {
     const v = engine.vizState();
     return {
@@ -92,16 +92,16 @@ export class SessionManager {
       clearTimeout(timer);
       this.evictionTimers.delete(id);
     }
-    engine.stop(); // تایمرِ cycle را متوقف می‌کند
-    // ارجاع‌های callback را قطع کن تا چیزی مانعِ آزادسازیِ engine نشود.
+    engine.stop(); // stops the cycle timer
+    // Drop the callback references so nothing prevents the engine from being freed.
     engine.onSnapshot = undefined;
     engine.onFinish = undefined;
     const deleted = this.sessions.delete(id);
-    if (deleted) this.onEvict?.(id); // بستنِ WebSocketهای این سشن
+    if (deleted) this.onEvict?.(id); // close this session's WebSockets
     return deleted;
   }
 
-  /** خلاصهٔ کاملِ همهٔ سشن‌ها (vizState هر کدام + id). */
+  /** Full summary of all sessions (each one's vizState + id). */
   listViz(): Array<{ id: string } & ReturnType<Engine["vizState"]>> {
     return [...this.sessions.entries()].map(([id, engine]) => ({
       id,
