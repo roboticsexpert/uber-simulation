@@ -123,6 +123,20 @@
       </tbody>
     </table>
 
+    <h2>⏱️ Ticks &amp; timing</h2>
+    <p class="lead">
+      The world advances in discrete steps called <b>cycles</b> (ticks). Each cycle your matcher is called
+      once: the engine sends you the current world state, your <code>decide()</code> returns assignments,
+      then the engine moves the drivers, settles completions and cancellations, and updates the scores.
+    </p>
+    <div class="rules">
+      <div class="rule"><span class="k">⏱️ One cycle</span><span class="v">= <b>1 second</b> of real time on this arena, and represents <b>1 game-minute</b>. Every rule time is in game-minutes — so the 5-minute pickup cap is 5 cycles, and the 30-minute sleep is 30 cycles.</span></div>
+      <div class="rule"><span class="k">🏁 Session length</span><span class="v"><b>240 cycles</b> (≈4 real minutes, = 4 game-hours). When the last cycle runs, the world finishes and is saved to the <a href="/results.html">Results</a> board.</span></div>
+      <div class="rule"><span class="k">🧍 Each cycle</span><span class="v">About <b>10 new ride requests</b> appear (on average), in a world of <b>100 drivers</b>.</span></div>
+      <div class="rule"><span class="k">⚡ Your turn</span><span class="v">Send your assignments for the current tick before the next cycle. Assignments tagged with an outdated tick are rejected.</span></div>
+    </div>
+    <p class="lead" style="margin:0 0 4px; font-size:12.5px">(These are the engine's current settings and can be tuned server-side.)</p>
+
     <h2>🎮 How do I play?</h2>
     <div class="steps">
       <div class="step"><div class="t"><span class="n">1</span>Get the sample code</div><div class="d">Clone or download the repository from GitHub.</div></div>
