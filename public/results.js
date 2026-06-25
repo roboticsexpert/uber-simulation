@@ -9,13 +9,9 @@ function when(ts) {
 }
 
 function rowHtml(r, i) {
-  const type = r.auto_match
-    ? '<span class="pill auto">auto (greedy)</span>'
-    : '<span class="pill ext">matcher بیرونی</span>';
   return `<tr>
     <td class="num rank">${i + 1}</td>
     <td><span class="maker">${esc(r.creator || "—")}</span> <span class="sid">${esc(r.id)}</span></td>
-    <td>${type}</td>
     <td class="num">${fmt(r.revenue)}</td>
     <td class="num good">${r.completed}</td>
     <td class="num bad">${r.cancelled}</td>
@@ -32,12 +28,12 @@ async function load() {
     const r = await api("/results?limit=100");
     const rows = r.results || [];
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="10" class="empty">هنوز سشنِ تمام‌شده‌ای ذخیره نشده.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" class="empty">هنوز سشنِ تمام‌شده‌ای ذخیره نشده.</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(rowHtml).join("");
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="10" class="empty">خطا در گرفتنِ نتایج (engine بالا نیست؟).</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="empty">خطا در گرفتنِ نتایج (engine بالا نیست؟).</td></tr>';
   }
 }
 

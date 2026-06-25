@@ -1,0 +1,17 @@
+{
+  "name": "uber-sim-matcher-node",
+  "version": "1.0.0",
+  "description": "Sample matcher (simple version) — matching competition client",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "tsx sample-client.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "tsx": "^4.22.4",
+    "@types/node": "^26.0.0"
+  }
+}

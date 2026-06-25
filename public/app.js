@@ -3,17 +3,7 @@
 let worlds = []; // [{id, ...vizState}]
 const cardCanvas = {}; // sid → canvas
 
-function askName() {
-  const n = (prompt("نام سازنده (اجباری):") || "").trim();
-  if (!n) { alert("نام سازنده اجباری است."); return null; }
-  return n;
-}
-document.getElementById("new-auto").onclick = () => {
-  const name = askName(); if (name) api("/sessions", "POST", { auto: true, name }).then(poll);
-};
-document.getElementById("new-empty").onclick = () => {
-  const name = askName(); if (name) api("/sessions", "POST", { auto: false, name }).then(poll);
-};
+// سشن‌ها فقط با کد (matcherِ بیرونی) ساخته می‌شوند؛ این صفحه فقط نمایش‌دهنده است.
 
 function frame() {
   for (const w of worlds) {
@@ -62,7 +52,7 @@ function syncCards() {
     pill.className = "pill " + (waiting ? "waiting" : w.status);
   }
   if (worlds.length === 0 && !grid.querySelector(".empty")) {
-    grid.innerHTML = `<div class="empty">هنوز دنیایی نیست. «دنیای جدید» را بزن یا با <code>npm run client</code> یک matcher وصل کن.</div>`;
+    grid.innerHTML = `<div class="empty">هنوز دنیایی نیست. سشن‌ها با کد ساخته می‌شوند — با <code>npm run client</code> یک matcher وصل کن.</div>`;
   }
 }
 

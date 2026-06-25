@@ -15,6 +15,8 @@ const PUBLIC_DIR = join(__dirname, "..", "public");
 const store = createStore();
 store.init().catch((e) => console.error("init دیتابیس ناموفق بود:", e));
 const manager = new SessionManager(store);
+// هنگام حذف/پاک‌سازیِ هر سشن (دستی یا خودکارِ پس از پایان)، WebSocketهایش را ببند.
+manager.onEvict = (id) => closeSessionSockets(id);
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -79,25 +81,21 @@ const server = createServer(async (req, res) => {
       if (seg.length === 1 && method === "GET") {
         return send(res, 200, { sessions: manager.listViz() });
       }
-      // POST /sessions → ساخت سشن. body: { auto?: boolean }
-      //   auto=true  → ماتچرِ داخلی، بلافاصله شروع می‌شود (دموی UI).
-      //   auto=false → منتظرِ matcherِ بیرونی؛ با اولین GET /state شروع می‌شود.
+      // POST /sessions → ساختِ سشن (با کد، توسطِ matcherِ بیرونی). body: { name }
+      //   سشن خالی و idle ساخته می‌شود؛ با اولین اتصالِ matcher (GET /state یا ws) شروع می‌شود.
       if (seg.length === 1 && method === "POST") {
         const body = await readJsonBody(req).catch(() => ({}));
         const name = typeof body.name === "string" ? body.name.trim() : "";
         if (!name) return send(res, 400, { error: "نام سازنده (name) اجباری است" });
         const { id, engine } = manager.create(name.slice(0, 60));
-        engine.autoMatch = !!body.auto;
-        if (engine.autoMatch) engine.start();
-        return send(res, 201, { id, creator: engine.creator, status: engine.status, autoMatch: engine.autoMatch });
+        return send(res, 201, { id, creator: engine.creator, status: engine.status });
       }
 
       const id = seg[1];
       const engine = id ? manager.get(id) : undefined;
 
-      // DELETE /sessions/:id
+      // DELETE /sessions/:id  (remove() خودش WebSocketها را می‌بندد)
       if (seg.length === 2 && method === "DELETE") {
-        closeSessionSockets(id);
         return send(res, manager.remove(id) ? 200 : 404, { removed: id });
       }
       if (!engine) return send(res, 404, { error: `session ${id} یافت نشد` });

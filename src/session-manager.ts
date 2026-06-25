@@ -22,6 +22,10 @@ function randomName(): string {
  */
 export class SessionManager {
   private sessions = new Map<string, Engine>();
+  /** تایمرهای پاک‌سازیِ سشن‌های تمام‌شده — تا هنگام حذفِ زودهنگام لغوشان کنیم. */
+  private evictionTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** هنگام حذفِ سشن صدا زده می‌شود (مثلاً برای بستنِ WebSocketها). */
+  onEvict?: (id: string) => void;
 
   constructor(private store: SessionStore) {}
 
@@ -33,14 +37,34 @@ export class SessionManager {
     while (this.sessions.has(id)) id = randomName(); // جلوگیری از تصادم
     const engine = new Engine();
     engine.creator = name; // نامِ سازنده (اجباری)
-    // وقتی سشن تمام شد، نتیجهٔ نهایی را در دیتابیس آرشیو کن (خطا سشن را نمی‌اندازد).
+    // وقتی سشن تمام شد: نتیجه را آرشیو کن، سپس برای آزادسازیِ حافظه از Map پاکش کن.
     engine.onFinish = () => {
       this.store.saveResult(this.buildResult(id, engine)).catch((e) =>
         console.error(`ذخیرهٔ نتیجهٔ سشن ${id} ناموفق بود:`, e),
       );
+      this.scheduleEviction(id);
     };
     this.sessions.set(id, engine);
     return { id, engine };
+  }
+
+  /**
+   * سشنِ تمام‌شده را پس از یک مهلت از حافظه پاک می‌کند تا نشتی نداشته باشیم.
+   * مهلت فرصت می‌دهد UI وضعیتِ نهایی را نشان دهد؛ با ttl=0 حذف فوری است.
+   */
+  private scheduleEviction(id: string): void {
+    if (this.evictionTimers.has(id)) return; // قبلاً زمان‌بندی شده
+    const ttl = config.finishedSessionTtlMs;
+    if (ttl <= 0) {
+      this.remove(id);
+      return;
+    }
+    const timer = setTimeout(() => {
+      this.evictionTimers.delete(id);
+      this.remove(id);
+    }, ttl);
+    timer.unref?.(); // نگذار این تایمر مانع خاموش‌شدنِ پروسه شود
+    this.evictionTimers.set(id, timer);
   }
 
   /** نتیجهٔ نهاییِ سشن را از وضعیتِ فعلیِ engine می‌سازد. */
@@ -49,7 +73,6 @@ export class SessionManager {
     return {
       id,
       creator: engine.creator,
-      autoMatch: engine.autoMatch,
       ticks: v.tick,
       seed: config.seed,
       scoreboard: v.scoreboard,
@@ -64,8 +87,18 @@ export class SessionManager {
   remove(id: string): boolean {
     const engine = this.sessions.get(id);
     if (!engine) return false;
-    engine.reset(); // تایمر را متوقف می‌کند
-    return this.sessions.delete(id);
+    const timer = this.evictionTimers.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      this.evictionTimers.delete(id);
+    }
+    engine.stop(); // تایمرِ cycle را متوقف می‌کند
+    // ارجاع‌های callback را قطع کن تا چیزی مانعِ آزادسازیِ engine نشود.
+    engine.onSnapshot = undefined;
+    engine.onFinish = undefined;
+    const deleted = this.sessions.delete(id);
+    if (deleted) this.onEvict?.(id); // بستنِ WebSocketهای این سشن
+    return deleted;
   }
 
   /** خلاصهٔ کاملِ همهٔ سشن‌ها (vizState هر کدام + id). */

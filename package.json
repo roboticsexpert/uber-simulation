@@ -7,8 +7,8 @@
     "start": "node --import tsx src/server.ts",
     "engine": "node --env-file-if-exists=.env --import tsx src/server.ts",
     "engine:fast": "CYCLE_MS=250 node --env-file-if-exists=.env --import tsx src/server.ts",
-    "client": "tsx client/sample-client.ts",
-    "client:smart": "tsx client/smart-client.ts"
+    "client:greedy": "tsx client/greedy.ts",
+    "client:smart": "tsx client/smart.ts"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",

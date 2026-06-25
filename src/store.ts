@@ -5,8 +5,6 @@ export interface SessionResult {
   id: string;
   /** نامِ سازندهٔ ماتچر (اجباری). */
   creator: string;
-  /** ماتچرِ داخلیِ greedy بوده یا ماتچرِ بیرونی. */
-  autoMatch: boolean;
   /** tickِ نهایی (معمولاً برابر sessionTicks). */
   ticks: number;
   /** seedِ سناریو، برای تکرارپذیری/مقایسه. */
@@ -50,7 +48,6 @@ class PostgresStore implements SessionStore {
         id          TEXT PRIMARY KEY,
         creator     TEXT NOT NULL DEFAULT '',
         finished_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        auto_match  BOOLEAN NOT NULL,
         ticks       INTEGER NOT NULL,
         seed        INTEGER NOT NULL,
         completed   INTEGER NOT NULL,
@@ -63,20 +60,21 @@ class PostgresStore implements SessionStore {
       )`;
     // migrationِ idempotent برای جدول‌هایی که از قبل بدونِ ستونِ creator ساخته شده‌اند.
     await this.sql`ALTER TABLE session_results ADD COLUMN IF NOT EXISTS creator TEXT NOT NULL DEFAULT ''`;
+    // ماتچرِ داخلی حذف شد — همهٔ سشن‌ها با ماتچرِ بیرونی کار می‌کنند؛ ستونِ قدیمی را پاک کن.
+    await this.sql`ALTER TABLE session_results DROP COLUMN IF EXISTS auto_match`;
   }
 
   async saveResult(r: SessionResult): Promise<void> {
     const s = r.scoreboard;
     await this.sql`
       INSERT INTO session_results
-        (id, creator, auto_match, ticks, seed, completed, cancelled, revenue, rider_avg, driver_avg, scoreboard, config)
+        (id, creator, ticks, seed, completed, cancelled, revenue, rider_avg, driver_avg, scoreboard, config)
       VALUES
-        (${r.id}, ${r.creator}, ${r.autoMatch}, ${r.ticks}, ${r.seed}, ${s.completed}, ${s.cancelled},
+        (${r.id}, ${r.creator}, ${r.ticks}, ${r.seed}, ${s.completed}, ${s.cancelled},
          ${s.revenue}, ${s.riderAvg}, ${s.driverAvg}, ${this.sql.json(s)}, ${this.sql.json(r.config)})
       ON CONFLICT (id) DO UPDATE SET
         finished_at = now(),
         creator     = EXCLUDED.creator,
-        auto_match  = EXCLUDED.auto_match,
         ticks       = EXCLUDED.ticks,
         seed        = EXCLUDED.seed,
         completed   = EXCLUDED.completed,
@@ -90,7 +88,7 @@ class PostgresStore implements SessionStore {
 
   async listResults(limit = 50): Promise<Record<string, unknown>[]> {
     const rows = await this.sql`
-      SELECT id, creator, finished_at, auto_match, ticks, seed, completed, cancelled,
+      SELECT id, creator, finished_at, ticks, seed, completed, cancelled,
              revenue, rider_avg, driver_avg, scoreboard, config
       FROM session_results
       ORDER BY revenue DESC, finished_at DESC
