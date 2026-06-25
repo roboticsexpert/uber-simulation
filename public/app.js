@@ -70,6 +70,26 @@ function syncCards() {
   }
 }
 
+// Poll once per simulation cycle (cycleMs). Smooth motion between polls is done
+// client-side via interpolation (setupAnim), so polling faster just wastes bandwidth.
+// Self-scheduling loop: each request is sent only after the previous one settles,
+// so a slow server can never make requests pile up.
+// Fill the "World parameters" section on the landing page with live config values.
+// Runs once: these are fixed for the engine's lifetime.
+async function loadWorldParams() {
+  let c;
+  try { c = (await api("/config")).config; } catch { return; }
+  if (!c) return;
+  const set = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+  const fmt = (n) => Number(n).toLocaleString("en-US");
+  const crossCycles = Math.round(c.worldWidth / c.driverSpeed); // cycles to drive across the map's width
+  set("cfg-map", `<b>${fmt(c.worldWidth)} × ${fmt(c.worldHeight)}</b> distance units — a square world. Driver positions and trip distances are measured in these units.`);
+  set("cfg-speed", `<b>${fmt(c.driverSpeed)} units</b> per game-minute (i.e. per cycle) — roughly <b>${crossCycles} cycles</b> to drive all the way across the map.`);
+  set("cfg-drivers", `<b>${fmt(c.driverCount)}</b> drivers. After <b>${c.driverIdleSleepMinutes} min</b> with no trip they sleep, then wake <b>${c.driverSleepMinutes} min</b> later.`);
+  set("cfg-demand", `~<b>${fmt(c.riderArrivalRate)}</b> new requests per cycle (Poisson). A rider waits at most <b>${c.riderPatienceMinutes} min</b> for pickup.`);
+}
+loadWorldParams();
+
 async function poll() {
   try {
     const r = await api("/sessions");
@@ -77,7 +97,6 @@ async function poll() {
     for (const w of worlds) setupAnim(w);
     syncCards();
   } catch (e) { /* engine is not up */ }
+  setTimeout(poll, 800);
 }
-
-setInterval(poll, 200);
 poll();

@@ -38,6 +38,10 @@ function updatePanel() {
   setText("revenue", Math.round(sb.revenue));
 }
 
+// Poll once per simulation cycle (cycleMs). Smooth motion between polls is done
+// client-side via interpolation (setupAnim), so polling faster just wastes bandwidth.
+// Self-scheduling loop: the next request is sent only after the previous one
+// settles, so a slow server can never make requests pile up.
 async function poll() {
   if (!ID) return;
   try {
@@ -47,7 +51,6 @@ async function poll() {
     setupAnim(world);
     updatePanel();
   } catch (e) { /* engine is not up */ }
+  setTimeout(poll, 800);
 }
-
-setInterval(poll, 200);
 poll();

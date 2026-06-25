@@ -11,7 +11,10 @@
     "client:smart": "tsx client/smart.ts",
     "client:triage": "tsx client/triage.ts",
     "client:profit": "tsx client/profit.ts",
-    "client:stable": "tsx client/stable.ts"
+    "client:stable": "tsx client/stable.ts",
+    "client:smart-triage": "tsx client/smart-triage.ts",
+    "client:nearest-driver": "tsx client/nearest-driver.ts",
+    "client:nearest-trip": "tsx client/nearest-trip.ts"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",

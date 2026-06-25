@@ -69,6 +69,11 @@ const server = createServer(async (req, res) => {
   if (method === "OPTIONS") return send(res, 204, {});
 
   try {
+    // ---- /config → the engine's tunable simulation parameters (for the landing page) ----
+    if (seg[0] === "config" && seg.length === 1 && method === "GET") {
+      return send(res, 200, { config });
+    }
+
     // ---- /results → archived results of finished sessions (leaderboard) ----
     if (seg[0] === "results" && seg.length === 1 && method === "GET") {
       const limit = Number(url.searchParams.get("limit")) || 50;
@@ -188,7 +193,10 @@ function handleMatcherSocket(ws: WebSocket, id: string, engine: Engine): void {
   });
   ws.on("close", () => {
     set!.delete(ws);
-    if (set!.size === 0) { wsClients.delete(id); engine.onSnapshot = undefined; }
+    // When the last matcher disconnects, treat the session as over: stop the
+    // engine and drop it from memory. remove() also closes any sockets and
+    // clears the wsClients entry, so it's safe (and idempotent) here.
+    if (set!.size === 0) manager.remove(id);
   });
 }
 
