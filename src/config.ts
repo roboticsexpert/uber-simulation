@@ -28,9 +28,9 @@ export const config = {
   minutesPerTick: num("MINUTES_PER_TICK", 1),
 
   // ---- drivers ----
-  driverCount: num("DRIVER_COUNT", 100),
+  driverCount: num("DRIVER_COUNT", 80),
   /** Driver speed: distance units per game minute. (placeholder — will be tuned) */
-  driverSpeed: num("DRIVER_SPEED", 750),
+  driverSpeed: num("DRIVER_SPEED", 650),
   /** No trip for this duration (minutes) → sleep. */
   driverIdleSleepMinutes: num("DRIVER_IDLE_SLEEP", 30),
   /** How long a driver sleeps (minutes) before waking up. */
@@ -40,7 +40,7 @@ export const config = {
   /** Average number of new requests per cycle (Poisson distribution). */
   riderArrivalRate: num("RIDER_ARRIVAL_RATE", 10),
   /** Maximum rider patience (minutes) from request to pickup. */
-  riderPatienceMinutes: num("RIDER_PATIENCE", 5),
+  riderPatienceMinutes: num("RIDER_PATIENCE", 4),
 
   // ---- fare ----
   baseFare: num("BASE_FARE", 5),
