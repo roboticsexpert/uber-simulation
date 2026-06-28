@@ -29,19 +29,26 @@ export class SessionManager {
 
   constructor(private store: SessionStore) {}
 
-  create(name: string): { id: string; engine: Engine } {
+  create(user: { id: string; username: string }): { id: string; engine: Engine } {
     if (this.sessions.size >= MAX_SESSIONS) {
       throw new Error(`the limit of ${MAX_SESSIONS} sessions is full`);
     }
     let id = randomName();
     while (this.sessions.has(id)) id = randomName(); // avoid collisions
     const engine = new Engine();
-    engine.creator = name; // creator's name (required)
+    engine.creator = user.username; // owner's display name
+    engine.userId = user.id; // owning user (every session belongs to a logged-in user)
     // When the session finishes: archive the result, then remove it from the Map to free memory.
     engine.onFinish = () => {
       this.store.saveResult(this.buildResult(id, engine)).catch((e) =>
         console.error(`failed to save result for session ${id}:`, e),
       );
+      // Archive the frame-by-frame recording so the run can be replayed later.
+      if (config.recordReplays) {
+        this.store.saveReplay(id, engine.replay()).catch((e) =>
+          console.error(`failed to save replay for session ${id}:`, e),
+        );
+      }
       this.scheduleEviction(id);
     };
     this.sessions.set(id, engine);
@@ -72,6 +79,7 @@ export class SessionManager {
     const v = engine.vizState();
     return {
       id,
+      userId: engine.userId,
       creator: engine.creator,
       ticks: v.tick,
       seed: config.seed,

@@ -44,28 +44,48 @@ Three components:
 
 ## 3. The cycle (in each Engine)
 
-Every `CYCLE_MS`:
-1. If `autoMatch` is on, the Engine builds the assignments itself (greedy); otherwise it uses the assignments received from the Matcher.
-2. `world.step()`: movement, pickup, rating, completion, cancellation, sleep/wake, request generation.
-3. A new snapshot is published.
+The engine is **event-driven** — there is no fixed clock. A cycle runs as soon as the matcher submits its answer (full speed):
+1. The Matcher submits its assignments for the current snapshot (`POST /assign` or a WS message).
+2. The Engine applies them, then `world.step()`: movement, pickup, rating, completion, cancellation, sleep/wake, request generation.
+3. A new snapshot is published and the per-cycle safety timeout is re-armed.
 4. `tick >= SESSION_TICKS` ⇒ status = `finished`.
+
+If the matcher does not answer within `CYCLE_TIMEOUT_MS`, the Engine advances anyway with whatever assignments it has (possibly none), so a slow/dead client can't stall the session. The real measured cycle duration is reported to the UI (as `cycleMs`) so the live animation stays in sync.
 
 ## 4. API
 
 Base: `http://localhost:8080` (or `PORT`). JSON, open CORS.
 
+### Auth
+Every session belongs to a registered user; the matcher client identifies itself with the user's **API token** (`Authorization: Bearer <token>`, or `?token=` for WebSockets).
+
+| Method and path | Action |
+|-----------|-----|
+| `POST /auth/register` | body `{ username, password }` → `{ id, username, token }` |
+| `POST /auth/login` | body `{ username, password }` → `{ id, username, token }` |
+| `GET /auth/me` | with token → `{ id, username, token }` |
+
 ### Session Management
 | Method and path | Action |
 |-----------|-----|
-| `POST /sessions` | Create + auto-start. Optional body `{ "auto": true }` (internal matcher). → `{ id, status }` |
-| `GET /sessions` | List of all worlds — an array of full vizState (for the UI grid) |
-| `DELETE /sessions/:id` | Delete a session |
-| `POST /sessions/:id/start` | Start/resume |
-| `POST /sessions/:id/reset` | Reset |
+| `POST /sessions` | **Requires token.** Create a session owned by the token's user. → `{ id, creator, status }` |
+| `GET /sessions` | List of all worlds — an array of full vizState (public, for the UI grid) |
+| `DELETE /sessions/:id` | Delete a session (owner only) |
+| `POST /sessions/:id/start` | Start/resume (owner only) |
+| `POST /sessions/:id/reset` | Reset (owner only) |
+
+### Results (public — anyone can see every submission)
+| Method and path | Action |
+|-----------|-----|
+| `GET /leaderboard` | One row per player (their best run), ranked by revenue |
+| `GET /results` | Every finished session, newest first |
+| `GET /results?user=<id>` | A single player's finished sessions |
+| `GET /replays/:id` | A finished run's frame-by-frame recording for visual playback (`{ id, replay: { creator, world, stepPerCycle, sessionTicks, frames } }`) |
 
 ### Matcher Interface — WebSocket (recommended)
-`ws://host/sessions/:id/ws`
+`ws://host/sessions/:id/ws?token=<your token>`
 
+- The owner's token is required (query param). Connecting without it is rejected (401).
 - Opening the socket = "matcher connected" → a waiting session **starts**.
 - Every cycle, the server **pushes** a snapshot: `{ id, status, tick, idleDrivers, openRequests, config, … }`.
 - The client replies with a message: `{ "tick", "assignments": [{ "driverId", "tripId" }] }`.
@@ -109,7 +129,9 @@ Tune with env: `CYCLE_MS`, `DRIVER_SPEED`, `RIDER_ARRIVAL_RATE`, `DRIVER_COUNT`,
 
 - [ ] Tune parameters (speed, arrival rate, fare) — currently placeholder.
 - [ ] Final competition scoring formula + display of ranking across sessions.
-- [ ] Session authentication/ownership (right now anyone can access any session).
-- [ ] Session persistence (currently in-memory and wiped on restart).
+- [x] User accounts + token auth; sessions are owned by a user (only the owner can drive/reset/delete).
+- [x] Per-player leaderboard; all submissions are publicly visible.
+- [x] Event-driven full-speed cycle with a per-cycle safety timeout.
+- [x] Per-run recording + visual replay (`/replays/:id`, `replay.html` with play/pause/seek/speed).
+- [ ] Session persistence (live sessions are in-memory and wiped on restart; results + replays are stored in Postgres).
 - [ ] Headless/batch mode for automatically running multiple seeds.
-- [ ] Matcher response time limit per cycle + logging for replay.

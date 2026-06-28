@@ -19,25 +19,25 @@ npm install
 
 ## Run
 
-Create a new world (matcher name is required):
+Register on the website to get your **API token**, then create a new world:
 
 ```bash
-MATCHER_NAME="Team Alpha" npm start
+TOKEN=your_api_token npm start
 ```
 
 Connect to an existing session:
 
 ```bash
-BASE_URL=http://localhost:8080 SESSION_ID=brave-fox-1 npm start
+BASE_URL=http://localhost:8080 TOKEN=your_api_token SESSION_ID=brave-fox-1 npm start
 ```
 
 ## Environment variables
 
-| Variable       | Default                 | Description                                              |
-| -------------- | ----------------------- | -------------------------------------------------------- |
-| `BASE_URL`     | `http://localhost:8080` | Server address (`https` automatically becomes `wss`).    |
-| `MATCHER_NAME` | —                       | Display name; required when creating a new world.        |
-| `SESSION_ID`   | —                       | If given, connects to that session instead of creating one. |
+| Variable     | Default                 | Description                                              |
+| ------------ | ----------------------- | -------------------------------------------------------- |
+| `BASE_URL`   | `http://localhost:8080` | Server address (`https` automatically becomes `wss`).    |
+| `TOKEN`      | —                       | **Required.** Your API token (from the website) — identifies your account. |
+| `SESSION_ID` | —                       | If given, connects to that session instead of creating one. |
 
 ## Watch your world live
 

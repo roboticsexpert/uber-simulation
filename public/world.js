@@ -26,6 +26,16 @@ function updatePanel() {
   const waiting = world.status === "idle";
   pill.textContent = waiting ? "waiting for matcher" : world.status;
   pill.className = "pill " + (waiting ? "waiting" : world.status);
+  // Owner-only controls: only the user who owns this world may reset/delete it.
+  const isOwner = window.US_AUTH && US_AUTH.id && world.userId === US_AUTH.id;
+  const actions = document.querySelector(".actions");
+  if (actions) actions.style.display = isOwner ? "" : "none";
+  // A finished run has a saved recording → offer a replay link.
+  const rl = document.getElementById("replaylink");
+  if (rl) {
+    if (world.status === "finished") { rl.style.display = ""; rl.href = "/replay.html?id=" + encodeURIComponent(ID); }
+    else rl.style.display = "none";
+  }
   const sb = world.scoreboard;
   setText("creator", world.creator || "—");
   setText("title", "🌍 " + (world.creator ? world.creator + " · " + ID : ID));

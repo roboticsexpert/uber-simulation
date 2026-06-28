@@ -1,41 +1,43 @@
 /**
- * DP MATCHER — the greedy matcher, but optimal "in total" each cycle.
+ * DP-TRIAGE MATCHER — the DP matcher, but it never grabs a trip that's doomed to cancel.
  *
- * The sample `greedy.ts` decides locally: it walks the requests (longest wait first)
- * and hands each one its single nearest free driver. That choice is optimal for *that*
- * request, but it can be bad for the cycle as a whole — a driver who is the nearest
- * pick for two requests gets eaten by the first one, leaving the second with a far
- * (or no) driver.
+ * This is `dp.ts` with a triage conscience. Two differences:
  *
- * This matcher keeps the same spirit but replaces the brain with **Dynamic Programming**:
- * each cycle it solves the assignment as a whole and picks the combination that is best
- * *in total*, not greedily one-by-one.
+ *   1) STRICT FEASIBILITY (always on, cannot be disabled).
+ *      A driver who cannot reach the rider before the patience deadline is never a
+ *      candidate — neither in the exact DP nor in the greedy mop-up. Assigning such a
+ *      driver only burns the driver for a trip that cancels anyway (a wasted driver +
+ *      a guaranteed cancellation). So if a trip is going to be cancelled, we don't take it
+ *      — we leave the driver free to rescue someone we *can* save.
+ *      (In plain `dp.ts` this is the default but can be turned off with DP_FEASIBILITY=0;
+ *       here it is hard-wired.)
  *
- *   Objective (lexicographic, exactly the greedy intent generalised to the whole cycle):
- *     1) serve as MANY requests as possible (every completion is worth a huge bonus), then
- *     2) among all maximum-coverage matchings, minimise the TOTAL pickup distance
- *        (nearer pickups ⇒ drivers free up sooner ⇒ better rating & throughput).
+ *   2) DEADLINE-AWARE TRIAGE (Earliest-Deadline-First).
+ *      When drivers are scarce and we cannot serve everyone, the value function adds an
+ *      urgency term so the DP rescues the riders closest to their deadline first. A fresh
+ *      request (low wait) can still be served next cycle; an about-to-expire request
+ *      cancels NOW if we skip it. Coverage is still maximised first (the serve bonus
+ *      dominates), urgency breaks the tie over *which* equal-size subset to serve, and
+ *      pickup distance is the final tie-break.
  *
- *   Method — bitmask DP (Held–Karp style) over the assignment problem:
- *     - For each request we keep only its K nearest *feasible* drivers (a driver who cannot
- *       reach the rider before patience runs out is never a candidate).
- *     - The union of those candidate drivers is a small "pool" of P drivers, indexed by bit.
- *     - dp[mask] = the best total value reachable using exactly the pool drivers in `mask`.
- *       We add requests one layer at a time; each request is either skipped or assigned to
- *       one of its still-free candidate bits. The optimum over all masks is the exact best
- *       combination on this candidate sub-graph.  O(requests · 2^P · K) per cycle.
- *     - To stay tractable the pool is capped at DP_MAX_BITS. The most urgent requests go
- *       into the exact DP; any that don't fit (and any DP leftovers) are mopped up with a
- *       plain greedy pass, so this matcher is never worse than the sample greedy.
+ *   Objective (lexicographic):
+ *     1) serve as MANY feasible requests as possible, then
+ *     2) among maximum-coverage matchings, rescue the most URGENT riders, then
+ *     3) minimise total pickup distance.
  *
- * Run:  npm run client:dp
- *       BASE_URL=http://host:8080 SESSION_ID=brave-fox-1 npm run client:dp
+ *   Method is identical to dp.ts: bitmask DP (Held–Karp) over the per-cycle assignment,
+ *   with each request keeping only its K nearest *feasible* drivers, an exact DP over a
+ *   bit-capped pool of the most urgent requests, and a greedy (still feasibility-checked)
+ *   mop-up for the overflow — so it is never worse than the plain greedy matcher.
+ *
+ * Run:  npm run client:dp-triage
+ *       BASE_URL=http://host:8080 SESSION_ID=brave-fox-1 npm run client:dp-triage
  *
  * Tune with env:
  *   DP_CANDIDATES   candidate drivers kept per request   (default 4)
  *   DP_MAX_BITS     max drivers in the exact DP pool      (default 18 ⇒ 2^18 states)
- *   DP_FEASIBILITY  1 = drop drivers who can't arrive in   (default 1)
- *                   time, 0 = pure nearest (like greedy)
+ *   DP_URGENCY      weight of the deadline term per       (default 1e5; must stay
+ *                   waited-minute (rescue urgent riders)   ≪ serve bonus, ≫ distances)
  */
 
 const BASE = process.env.BASE_URL ?? "http://localhost:8080";
@@ -53,10 +55,16 @@ function num(name: string, def: number): number {
 
 const K = Math.max(1, Math.floor(num("DP_CANDIDATES", 4)));
 const MAX_BITS = Math.max(1, Math.floor(num("DP_MAX_BITS", 18)));
-const FEASIBILITY = num("DP_FEASIBILITY", 1) !== 0;
 
-/** Serving one request dominates any distance term, so coverage is maximised first. */
+/** Serving one request dominates everything else, so coverage is maximised first. */
 const SERVE_BONUS = 1e7;
+/**
+ * Urgency weight (per minute already waited). It must sit between the serve bonus and the
+ * pickup distances: ≪ SERVE_BONUS (so it never sacrifices a completion) but ≫ any plausible
+ * distance (world diagonal ≈ 11314), so among equal-coverage matchings the most
+ * about-to-expire riders are rescued before distance is even considered.
+ */
+const URGENCY = num("DP_URGENCY", 1e5);
 
 interface Vec2 { x: number; y: number; }
 interface IdleDriver { id: string; pos: Vec2; }
@@ -85,6 +93,7 @@ interface Stats {
   served: number;     // total requests matched this cycle
   dpServed: number;   // matched by the exact DP
   greedyServed: number; // matched by the greedy mop-up pass
+  doomed: number;     // open requests with no feasible driver (left to cancel, not grabbed)
   open: number;
   idle: number;
 }
@@ -94,7 +103,7 @@ function decide(state: State): Stats {
   const drivers = state.idleDrivers;
   const reqs = state.openRequests;
   const empty: Stats = {
-    assignments: [], served: 0, dpServed: 0, greedyServed: 0,
+    assignments: [], served: 0, dpServed: 0, greedyServed: 0, doomed: 0,
     open: reqs.length, idle: drivers.length,
   };
   if (drivers.length === 0 || reqs.length === 0) return empty;
@@ -104,28 +113,30 @@ function decide(state: State): Stats {
   const step = state.config.driverSpeed * mpt;
   const patience = state.config.riderPatienceMinutes;
 
+  // STRICT feasibility — a driver who arrives after the deadline would only cause a
+  // cancellation, so it is never a candidate. This is the heart of "triage".
   const feasible = (D: number, waited: number): boolean => {
-    if (!FEASIBILITY) return true;
-    // The driver picks up `ticks` steps from now; the last still-waiting tick is
-    // waited + (ticks-1)·mpt, which must not exceed the patience limit.
     const ticks = Math.max(1, Math.ceil(D / step));
     return waited + (ticks - 1) * mpt <= patience + 1e-9;
   };
 
-  // 1) For each request, keep its K nearest feasible drivers.
+  // Per request: its value (urgency reward) and its K nearest feasible drivers.
   type Cand = { driverIdx: number; dist: number };
-  const reqCands: Cand[][] = reqs.map((req) => {
+  const reqCands: Cand[][] = [];
+  let doomed = 0;
+  for (const req of reqs) {
     const cands: Cand[] = [];
     for (let d = 0; d < drivers.length; d++) {
       const D = dist(drivers[d].pos, req.origin);
       if (feasible(D, req.waitedMinutes)) cands.push({ driverIdx: d, dist: D });
     }
     cands.sort((a, b) => a.dist - b.dist);
-    return cands.slice(0, K);
-  });
+    if (cands.length === 0) doomed++; // no one can save this rider → don't grab a driver for it
+    reqCands.push(cands.slice(0, K));
+  }
 
-  // 2) Build the exact-DP pool within the bit budget. Most urgent requests (longest wait)
-  //    get priority into the DP; the rest spill over to the greedy mop-up.
+  // Build the exact-DP pool within the bit budget. Most urgent requests (longest wait)
+  // get priority into the DP; the rest spill over to the greedy mop-up.
   const order = reqs
     .map((_, i) => i)
     .sort((a, b) => reqs[b].waitedMinutes - reqs[a].waitedMinutes);
@@ -147,7 +158,12 @@ function decide(state: State): Stats {
   const bitToDriver = new Array<number>(P);
   for (const [di, bit] of driverToBit) bitToDriver[bit] = di;
 
-  // 3) Bitmask DP over dpReqs. dp[mask] = best total value using pool drivers in `mask`.
+  // value of serving request r with a driver at pickup distance D:
+  //   coverage bonus  +  urgency (rescue the longest-waiting)  −  distance.
+  const reqValue = (r: number, D: number) =>
+    SERVE_BONUS + URGENCY * reqs[r].waitedMinutes - D;
+
+  // Bitmask DP over dpReqs. dp[mask] = best total value using pool drivers in `mask`.
   const SIZE = 1 << P;
   const NEG = -Infinity;
   let dp = new Float64Array(SIZE).fill(NEG);
@@ -158,7 +174,7 @@ function decide(state: State): Stats {
     const r = dpReqs[layer];
     const cand = reqCands[r].map((c) => ({
       bit: driverToBit.get(c.driverIdx)!,
-      val: SERVE_BONUS - c.dist, // serve (+bonus), prefer the nearest (−distance)
+      val: reqValue(r, c.dist),
     }));
     const ndp = new Float64Array(SIZE).fill(NEG);
     const ch = new Int32Array(SIZE).fill(-2); // -2 = unreached
@@ -204,9 +220,8 @@ function decide(state: State): Stats {
   }
   const dpServed = assignments.length;
 
-  // 4) Greedy mop-up: any still-open request (overflow + DP skips) takes its nearest free
-  //    feasible driver from whatever is left. This can only add completions, so the DP
-  //    matcher is never worse than the plain greedy one.
+  // Greedy mop-up: any still-open request (overflow + DP skips) takes its nearest free
+  // FEASIBLE driver. Still strict — a doomed trip is never grabbed here either.
   let greedyServed = 0;
   for (const r of order) {
     if (servedReq.has(r)) continue;
@@ -232,6 +247,7 @@ function decide(state: State): Stats {
     served: assignments.length,
     dpServed,
     greedyServed,
+    doomed,
     open: reqs.length,
     idle: drivers.length,
   };
@@ -241,9 +257,9 @@ function decide(state: State): Stats {
 async function main() {
   let session = process.env.SESSION_ID ?? "";
   if (!session) {
-    const name = (process.env.MATCHER_NAME ?? "DP").trim();
+    const name = (process.env.MATCHER_NAME ?? "DP-Triage").trim();
     if (!name) {
-      console.error('❌ MATCHER_NAME is required. Example:  MATCHER_NAME="Team Alpha" npm run client:dp');
+      console.error('❌ MATCHER_NAME is required. Example:  MATCHER_NAME="Team Alpha" npm run client:dp-triage');
       process.exit(1);
     }
     const r = await fetch(`${BASE}/sessions`, {
@@ -271,9 +287,10 @@ async function main() {
     if (state.status !== "running") return;
     const d = decide(state);
     ws.send(JSON.stringify({ tick: state.tick, assignments: d.assignments }));
+    const doomedNote = d.doomed ? `, ${d.doomed} doomed skipped` : "";
     console.log(
       `[${session}] tick ${state.tick}: ${d.open} requests, ${d.idle} idle → ` +
-        `${d.served} assigned (dp ${d.dpServed}, greedy ${d.greedyServed})`,
+        `${d.served} assigned (dp ${d.dpServed}, greedy ${d.greedyServed}${doomedNote})`,
     );
   });
 }

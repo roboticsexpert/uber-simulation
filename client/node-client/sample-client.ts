@@ -8,14 +8,19 @@
  *   - If SESSION_ID is given, it connects to that same world.
  *   - Otherwise it creates a new world over REST, then opens the socket.
  *
- * Run:  npm start
- *       BASE_URL=http://host:8080 SESSION_ID=brave-fox-1 npm start
+ * Auth: every session belongs to a logged-in user. Register on the website to
+ * get your API token, then pass it as TOKEN — the client uses it to prove who
+ * it is (so your runs land on your personal scoreboard).
+ *
+ * Run:  TOKEN=your_api_token npm start
+ *       BASE_URL=http://host:8080 TOKEN=... SESSION_ID=brave-fox-1 npm start
  *
  * Each participant only changes the `decide()` function.
  */
 
 const BASE = process.env.BASE_URL ?? "https://snapp.zisef.ir";
 const WS_BASE = BASE.replace(/^http/, "ws");
+const TOKEN = (process.env.TOKEN ?? "").trim();
 
 interface Vec2 { x: number; y: number; }
 interface State {
@@ -42,25 +47,30 @@ function decide(state: State): Assignment[] {
 /** ------------------------------ */
 
 async function main() {
+  if (!TOKEN) {
+    console.error("❌ TOKEN is required. Register on the website to get your API token, then:  TOKEN=your_api_token npm start");
+    process.exit(1);
+  }
+
   let session = process.env.SESSION_ID ?? "";
   if (!session) {
-    const name = (process.env.MATCHER_NAME ?? "").trim();
-    if (!name) {
-      console.error('❌ MATCHER_NAME is required. Example:  MATCHER_NAME="Team Alpha" npm start');
-      process.exit(1);
-    }
     const r = await fetch(`${BASE}/sessions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
+      body: "{}",
     }).then((x) => x.json());
+    if (!r.id) {
+      console.error(`❌ Could not create a session: ${r.error ?? "unknown error"} (is your TOKEN valid?)`);
+      process.exit(1);
+    }
     session = r.id;
-    console.log(`🌍 New world created: ${session} (creator: ${name})`);
+    console.log(`🌍 New world created: ${session} (creator: ${r.creator})`);
   }
 
   console.log(`👀 Watch your world live:  ${BASE}/world.html?id=${session}`);
 
-  const ws = new WebSocket(`${WS_BASE}/sessions/${session}/ws`);
+  // The token goes on the socket URL so the server knows the matcher is yours.
+  const ws = new WebSocket(`${WS_BASE}/sessions/${session}/ws?token=${encodeURIComponent(TOKEN)}`);
 
   ws.addEventListener("open", () => console.log(`🔌 Socket connected to ${session} — waiting for state…`));
   ws.addEventListener("error", (e: any) => console.error("Socket error:", e?.message ?? e));

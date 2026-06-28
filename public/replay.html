@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🌍 Uber-Sim — World</title>
+  <title>▶ Uber-Sim — Replay</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&display=swap" rel="stylesheet" />
@@ -19,12 +19,9 @@
     header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
     header b { font-size: 16px; font-weight: 800; }
     .spacer { flex: 1; }
-    a.back, button { font-family: var(--font); border-radius: 7px; padding: 8px 13px; font-weight: 700; cursor: pointer; font-size: 13px; text-decoration: none; }
-    a.back { background: transparent; color: var(--text); border: 1px solid var(--line); }
-    button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
-    button.danger { background: #b62324; color: #fff; border: none; }
+    a.back { font-family: var(--font); border-radius: 7px; padding: 8px 13px; font-weight: 700; cursor: pointer; font-size: 13px; text-decoration: none; background: transparent; color: var(--text); border: 1px solid var(--line); }
+    .pill { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; background: #6f42c1; }
     main { flex: 1; display: flex; min-height: 0; }
-    /* min-width/height: 0 so the canvas backing store size doesn't feed back into layout (prevents slow width creep) */
     #canvas { flex: 1; min-width: 0; min-height: 0; display: block; background: #11161c; }
     #side { width: 250px; border-inline-end: 1px solid var(--line); padding: 16px; overflow: auto; }
     .stat { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
@@ -32,21 +29,23 @@
     .stat b { font-variant-numeric: tabular-nums; }
     .legend { display: flex; flex-direction: column; gap: 7px; font-size: 12px; margin-top: 14px; }
     .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-inline-end: 7px; }
-    .actions { display: flex; gap: 8px; margin-top: 16px; }
-    .actions button { flex: 1; }
-    .pill { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; }
-    .pill.running { background: #1f6f3f; } .pill.idle { background: #44403c; } .pill.finished { background: #1f4f8f; }
-    .pill.waiting { background: #6b4e16; color: #f3d291; }
+
+    /* transport bar */
+    .transport { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--line); background: var(--panel); }
+    .transport button { font-family: var(--font); background: var(--accent); color: #0f1419; border: none; border-radius: 7px; padding: 8px 14px; font-weight: 800; cursor: pointer; font-size: 14px; min-width: 44px; }
+    .transport button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+    .transport input[type=range] { flex: 1; accent-color: var(--accent); }
+    .transport .time { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); min-width: 110px; text-align: center; }
+    .transport select { font-family: var(--font); background: #11161c; color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 7px 8px; font-size: 13px; }
+    .transport .lbl { font-size: 12px; color: var(--muted); }
   </style>
 </head>
 <body>
   <header>
-    <a class="back" href="/">← All worlds</a>
-    <b id="title">🌍 …</b>
-    <span class="pill idle" id="pill">…</span>
+    <a class="back" href="/results.html">← Results</a>
+    <b id="title">▶ Replay …</b>
+    <span class="pill">replay</span>
     <span class="spacer"></span>
-    <a class="back" id="replaylink" href="#" style="display:none">▶ Replay</a>
-    <div id="authbar"></div>
   </header>
   <main>
     <canvas id="canvas"></canvas>
@@ -67,15 +66,24 @@
         <div><span class="dot" style="background:var(--req)"></span>🧍 Waiting rider</div>
         <div><span class="dot" style="background:var(--dest)"></span>📍 Destination</div>
       </div>
-      <div class="actions">
-        <button id="reset" class="ghost">↻ Reset</button>
-        <button id="delete" class="danger">🗑 Delete</button>
-      </div>
     </div>
   </main>
+  <div class="transport">
+    <button id="playpause" title="Play / Pause">▶</button>
+    <button id="restart" class="ghost" title="Restart">⏮</button>
+    <input id="seek" type="range" min="0" max="0" value="0" step="1" />
+    <span class="time" id="time">0 / 0</span>
+    <span class="lbl">speed</span>
+    <select id="speed">
+      <option value="0.5">0.5×</option>
+      <option value="1" selected>1×</option>
+      <option value="2">2×</option>
+      <option value="4">4×</option>
+      <option value="8">8×</option>
+    </select>
+  </div>
 
-  <script src="/auth.js"></script>
   <script src="/render.js"></script>
-  <script src="/world.js"></script>
+  <script src="/replay.js"></script>
 </body>
 </html>

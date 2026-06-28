@@ -37,6 +37,11 @@ import WebSocket from "ws";
 // ─────────────────────────────────────────────────────────────────────────────
 const BASE = process.env.BASE_URL ?? "http://localhost:8080";
 const WS_BASE = BASE.replace(/^http/, "ws");
+const TOKEN = (process.env.TOKEN ?? "").trim();
+if (!TOKEN) {
+  console.error("❌ TOKEN is required. Register on the website to get your API token, then run with TOKEN=your_api_token");
+  process.exit(1);
+}
 const DASHBOARD = process.env.DASHBOARD !== "0" && !!process.stdout.isTTY;
 
 /**
@@ -571,7 +576,7 @@ async function ensureSession(): Promise<string> {
   }
   const r = await fetch(`${BASE}/sessions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
     body: JSON.stringify({ name }),
   }).then((x) => x.json());
   return r.id as string;
@@ -613,7 +618,7 @@ async function run(): Promise<void> {
   const MAX_RECONNECT = 5;
 
   const connect = () => {
-    const ws = new WebSocket(`${WS_BASE}/sessions/${session}/ws`);
+    const ws = new WebSocket(`${WS_BASE}/sessions/${session}/ws?token=${encodeURIComponent(TOKEN)}`);
 
     ws.on("open", () => { reconnects = 0; });
     ws.on("error", (e: Error) => {

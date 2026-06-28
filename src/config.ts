@@ -15,8 +15,19 @@ export const config = {
   worldHeight: num("WORLD_HEIGHT", 8_000),
 
   // ---- time / session ----
-  /** How many real milliseconds each cycle lasts (user's request: 30 seconds). */
+  /**
+   * Nominal cycle duration (ms). The engine no longer sleeps a fixed amount each
+   * cycle — it advances as soon as the matcher submits its answer (full speed).
+   * This value is only a hint for the UI's movement interpolation; the real
+   * cycle duration is measured live and reported back to the UI.
+   */
   cycleMs: num("CYCLE_MS", 1_000),
+  /**
+   * Safety timeout (ms): if the matcher does not submit within this window, the
+   * engine advances anyway with whatever assignments it has (possibly none), so
+   * a slow or dead client can never stall the whole session.
+   */
+  cycleTimeoutMs: num("CYCLE_TIMEOUT_MS", 10_000),
   /** How many cycles a session lasts. 2 hours / 30 seconds = 240. */
   sessionTicks: num("SESSION_TICKS", 240),
   /**
@@ -26,6 +37,8 @@ export const config = {
   finishedSessionTtlMs: num("FINISHED_SESSION_TTL_MS", 30_000),
   /** How many "game minutes" each cycle corresponds to. */
   minutesPerTick: num("MINUTES_PER_TICK", 1),
+  /** Record every run frame-by-frame so it can be replayed afterwards. (1 = on, 0 = off) */
+  recordReplays: num("RECORD_REPLAYS", 1),
 
   // ---- drivers ----
   driverCount: num("DRIVER_COUNT", 80),

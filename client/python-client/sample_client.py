@@ -5,15 +5,18 @@ The server pushes the world state every cycle; the client immediately returns
 its assignments on the same socket. (No polling.)
 
   - If SESSION_ID is given, it connects to that same world.
-  - Otherwise it creates a new world over REST (MATCHER_NAME is required),
-    then opens the socket.
+  - Otherwise it creates a new world over REST, then opens the socket.
+
+Auth: every session belongs to a logged-in user. Register on the website to get
+your API token, then pass it as TOKEN — the client uses it to prove who it is
+(so your runs land on your personal scoreboard).
 
 Install dependencies:
     pip install -r requirements.txt
 
 Run:
-    MATCHER_NAME="Team Alpha" python sample_client.py
-    BASE_URL=http://host:8080 SESSION_ID=brave-fox-1 python sample_client.py
+    TOKEN=your_api_token python sample_client.py
+    BASE_URL=http://host:8080 TOKEN=... SESSION_ID=brave-fox-1 python sample_client.py
 
 Each participant only changes the `decide()` function.
 """
@@ -28,6 +31,7 @@ import websockets
 
 BASE = os.environ.get("BASE_URL", "https://snapp.zisef.ir")
 WS_BASE = "ws" + BASE[len("http"):]  # http→ws, https→wss
+TOKEN = os.environ.get("TOKEN", "").strip()
 
 
 # ----- Participant logic -----
@@ -46,32 +50,33 @@ def decide(state: dict) -> list[dict]:
 # -----------------------------
 
 
-def create_session(name: str) -> str:
-    """Creates a new world over REST and returns its id."""
-    body = json.dumps({"name": name}).encode()
+def create_session() -> dict:
+    """Creates a new world over REST (authenticated by TOKEN) and returns the response."""
     req = urllib.request.Request(
         f"{BASE}/sessions",
-        data=body,
-        headers={"Content-Type": "application/json"},
+        data=b"{}",
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {TOKEN}"},
         method="POST",
     )
     with urllib.request.urlopen(req) as resp:
-        return json.load(resp)["id"]
+        return json.load(resp)
 
 
 async def main() -> None:
+    if not TOKEN:
+        print("❌ TOKEN is required. Register on the website to get your API token, then:  TOKEN=your_api_token python sample_client.py")
+        sys.exit(1)
+
     session = os.environ.get("SESSION_ID", "")
     if not session:
-        name = os.environ.get("MATCHER_NAME", "").strip()
-        if not name:
-            print('❌ MATCHER_NAME is required. Example:  MATCHER_NAME="Team Alpha" python sample_client.py')
-            sys.exit(1)
-        session = create_session(name)
-        print(f"🌍 New world created: {session} (creator: {name})")
+        r = create_session()
+        session = r["id"]
+        print(f"🌍 New world created: {session} (creator: {r.get('creator')})")
 
     print(f"👀 Watch your world live:  {BASE}/world.html?id={session}")
 
-    url = f"{WS_BASE}/sessions/{session}/ws"
+    # The token goes on the socket URL so the server knows the matcher is yours.
+    url = f"{WS_BASE}/sessions/{session}/ws?token={TOKEN}"
     async with websockets.connect(url) as ws:
         print(f"🔌 Socket connected to {session} — waiting for state…")
         async for raw in ws:

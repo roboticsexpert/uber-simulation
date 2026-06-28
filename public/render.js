@@ -8,12 +8,15 @@ const anim = {}; // `${sid}:${did}` → { fx,fy,tx,ty,start,dur }
 const heading = {};
 const lastTick = {}; // sid → last tick seen
 
-const api = (p, m = "GET", body) =>
-  fetch(p, {
+const api = (p, m = "GET", body) => {
+  const auth = window.US_AUTH ? window.US_AUTH.header() : {};
+  const headers = { ...(body ? { "Content-Type": "application/json" } : {}), ...auth };
+  return fetch(p, {
     method: m,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
+    headers: Object.keys(headers).length ? headers : undefined,
     body: body ? JSON.stringify(body) : undefined,
   }).then((r) => r.json());
+};
 
 /* ---------- interpolation ---------- */
 
@@ -37,7 +40,9 @@ function setupAnim(w) {
   // First time we see this world: cars snap immediately to their real positions (no entry glide)
   const firstSight = lastTick[w.id] === undefined;
   lastTick[w.id] = w.tick;
-  const step = w.stepPerCycle || 8;
+  // The engine sends stepPerCycle (= driverSpeed × minutesPerTick); fall back to the
+  // current default driver speed if an old payload lacks it (was 8 in the legacy tiny world).
+  const step = w.stepPerCycle || 650;
   const dur = Math.max(300, w.cycleMs || 1000);
   const now = performance.now();
   const targets = {};

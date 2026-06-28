@@ -79,6 +79,7 @@
     <h1>🚕 Multi-World Arena</h1>
     <span class="sub">Multiple Uber worlds running at once</span>
     <span class="spacer"></span>
+    <div id="authbar"></div>
     <a class="navlink" href="/results.html">🏆 Results</a>
   </header>
 
@@ -130,10 +131,11 @@
       then the engine moves the drivers, settles completions and cancellations, and updates the scores.
     </p>
     <div class="rules">
-      <div class="rule"><span class="k">⏱️ One cycle</span><span class="v">= <b>1 second</b> of real time on this arena, and represents <b>1 game-minute</b>. Every rule time is in game-minutes — so the 5-minute pickup cap is 5 cycles, and the 30-minute sleep is 30 cycles.</span></div>
-      <div class="rule"><span class="k">🏁 Session length</span><span class="v"><b>240 cycles</b> (≈4 real minutes, = 4 game-hours). When the last cycle runs, the world finishes and is saved to the <a href="/results.html">Results</a> board.</span></div>
+      <div class="rule"><span class="k">⏱️ One cycle</span><span class="v">represents <b>1 game-minute</b>. Every rule time is in game-minutes — so the 5-minute pickup cap is 5 cycles, and the 30-minute sleep is 30 cycles.</span></div>
+      <div class="rule"><span class="k">⚡ Full speed</span><span class="v">The arena runs <b>as fast as your matcher answers</b> — the world advances the instant you submit, not on a fixed clock. Answer faster, finish sooner. (A slow/dead client is auto-advanced after a timeout so it can't stall.)</span></div>
+      <div class="rule"><span class="k">🏁 Session length</span><span class="v"><b>240 cycles</b> (= 4 game-hours). When the last cycle runs, the world finishes and is saved to the <a href="/results.html">Results</a> board.</span></div>
       <div class="rule"><span class="k">🧍 Each cycle</span><span class="v">About <b>10 new ride requests</b> appear (on average), in a world of <b>100 drivers</b>.</span></div>
-      <div class="rule"><span class="k">⚡ Your turn</span><span class="v">Send your assignments for the current tick before the next cycle. Assignments tagged with an outdated tick are rejected.</span></div>
+      <div class="rule"><span class="k">⚡ Your turn</span><span class="v">Send your assignments for the current tick; the engine immediately advances. Assignments tagged with an outdated tick are rejected.</span></div>
     </div>
     <p class="lead" style="margin:0 0 4px; font-size:12.5px">(These are the engine's current settings and can be tuned server-side.)</p>
 
@@ -151,28 +153,33 @@
 
     <h2>🎮 How do I play?</h2>
     <div class="steps">
-      <div class="step"><div class="t"><span class="n">1</span>Get the sample code</div><div class="d">Clone or download the repository from GitHub.</div></div>
-      <div class="step"><div class="t"><span class="n">2</span>Pick a language</div><div class="d">A ready-to-run sample client is included for both <b>Node.js</b> and <b>Python</b>.</div></div>
-      <div class="step"><div class="t"><span class="n">3</span>Write your algorithm</div><div class="d">Change only the <code>decide()</code> function and run it — your world shows up on this page.</div></div>
+      <div class="step"><div class="t"><span class="n">1</span>Create an account</div><div class="d">Register up top with a <b>username + password</b>. You get a personal <b>API token</b> — your client uses it to prove which player it is.</div></div>
+      <div class="step"><div class="t"><span class="n">2</span>Get the sample code</div><div class="d">Clone the repo from GitHub. A ready-to-run client is included for both <b>Node.js</b> and <b>Python</b>.</div></div>
+      <div class="step"><div class="t"><span class="n">3</span>Write your algorithm</div><div class="d">Change only the <code>decide()</code> function, run with your token — your world shows up here and your runs land on your <a href="/results.html">scoreboard</a>.</div></div>
+    </div>
+
+    <div class="score-callout">
+      🔑 <b>Log in above</b> to get your API token, then pass it to the client as the <code>TOKEN</code> environment variable.
+      Every session is tied to your account, so the leaderboard is per player and your submissions are public for everyone to see.
     </div>
 
     <p style="margin-bottom:6px">First, get the code:</p>
     <pre>git clone https://github.com/Real-World-Games/UberSimulation
 cd UberSimulation</pre>
 
-    <p style="margin:14px 0 6px">Then run <b>one</b> of the sample clients (each connects to this arena):</p>
+    <p style="margin:14px 0 6px">Then run <b>one</b> of the sample clients with your token (each connects to this arena):</p>
     <div class="clients">
       <div>
         <div class="client-head">🟢 Node.js <span class="hint">(Node 22+)</span></div>
         <pre>cd client/node-client
 npm install
-MATCHER_NAME="Team Alpha" npm start</pre>
+TOKEN=your_api_token npm start</pre>
       </div>
       <div>
         <div class="client-head">🐍 Python <span class="hint">(Python 3.10+)</span></div>
         <pre>cd client/python-client
 pip install -r requirements.txt
-MATCHER_NAME="Team Alpha" python sample_client.py</pre>
+TOKEN=your_api_token python sample_client.py</pre>
       </div>
     </div>
     <p class="lead" style="margin:12px 0 0; font-size:13px">
@@ -186,6 +193,7 @@ MATCHER_NAME="Team Alpha" python sample_client.py</pre>
     </div>
   </section>
 
+  <script src="/auth.js"></script>
   <script src="/render.js"></script>
   <script src="/app.js"></script>
 </body>

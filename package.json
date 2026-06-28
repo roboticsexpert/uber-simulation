@@ -4,11 +4,12 @@
   "description": "Matching competition platform — Uber-like simulation engine",
   "type": "module",
   "scripts": {
-    "start": "node --import tsx src/server.ts",
+    "start": "node --env-file-if-exists=.env --import tsx src/server.ts",
     "engine": "node --env-file-if-exists=.env --import tsx src/server.ts",
     "engine:fast": "CYCLE_MS=250 node --env-file-if-exists=.env --import tsx src/server.ts",
     "client:greedy": "tsx client/greedy.ts",
     "client:dp": "tsx client/dp.ts",
+    "client:dp-triage": "tsx client/dp-triage.ts",
     "client:smart": "tsx client/smart.ts",
     "client:triage": "tsx client/triage.ts",
     "client:profit": "tsx client/profit.ts",

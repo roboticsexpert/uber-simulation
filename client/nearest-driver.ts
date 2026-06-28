@@ -18,6 +18,11 @@
 
 const BASE = process.env.BASE_URL ?? "http://localhost:8080";
 const WS_BASE = BASE.replace(/^http/, "ws");
+const TOKEN = (process.env.TOKEN ?? "").trim();
+if (!TOKEN) {
+  console.error("❌ TOKEN is required. Register on the website to get your API token, then run with TOKEN=your_api_token");
+  process.exit(1);
+}
 
 interface Vec2 { x: number; y: number; }
 interface State {
@@ -61,7 +66,7 @@ async function ensureSession(): Promise<string> {
   }
   const r = await fetch(`${BASE}/sessions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
     body: JSON.stringify({ name }),
   }).then((x) => x.json());
   console.log(`🌍 New world created: ${r.id} (creator: ${name})`);
@@ -70,7 +75,7 @@ async function ensureSession(): Promise<string> {
 
 async function main() {
   const session = await ensureSession();
-  const ws = new WebSocket(`${WS_BASE}/sessions/${session}/ws`);
+  const ws = new WebSocket(`${WS_BASE}/sessions/${session}/ws?token=${encodeURIComponent(TOKEN)}`);
 
   ws.addEventListener("open", () => console.log(`📍 NEAREST-DRIVER connected to ${session} — each trip takes its nearest driver`));
   ws.addEventListener("error", (e: any) => console.error("Socket error:", e?.message ?? e));
