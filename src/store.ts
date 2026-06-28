@@ -20,6 +20,10 @@ export interface SessionResult {
   userId: string;
   /** The owner's username (denormalized for display). */
   creator: string;
+  /** The city this session ran (the world flavour / parameter preset). */
+  cityId: string;
+  /** The city's display name (denormalized for display). */
+  cityName: string;
   /** The final tick (usually equal to sessionTicks). */
   ticks: number;
   /** The scenario seed, for reproducibility/comparison. */
@@ -37,6 +41,13 @@ export interface SessionResult {
   };
   /** A snapshot of the session config, for context. */
   config: Record<string, number>;
+  /** Per-city breakdown of the run (empty/one entry for a single-city session). */
+  legs: {
+    leg: number;
+    cityId: string;
+    cityName: string;
+    scoreboard: SessionResult["scoreboard"];
+  }[];
 }
 
 export interface SessionStore {
@@ -92,6 +103,8 @@ class PostgresStore implements SessionStore {
         id          TEXT PRIMARY KEY,
         user_id     TEXT NOT NULL DEFAULT '',
         creator     TEXT NOT NULL DEFAULT '',
+        city_id     TEXT NOT NULL DEFAULT 'default',
+        city_name   TEXT NOT NULL DEFAULT 'Metropolis',
         finished_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         ticks       INTEGER NOT NULL,
         seed        INTEGER NOT NULL,
@@ -101,11 +114,15 @@ class PostgresStore implements SessionStore {
         rider_avg   DOUBLE PRECISION NOT NULL,
         driver_avg  DOUBLE PRECISION NOT NULL,
         scoreboard  JSONB NOT NULL,
-        config      JSONB NOT NULL
+        config      JSONB NOT NULL,
+        legs        JSONB NOT NULL DEFAULT '[]'
       )`;
     // Idempotent migrations for tables created by earlier versions.
     await this.sql`ALTER TABLE session_results ADD COLUMN IF NOT EXISTS creator TEXT NOT NULL DEFAULT ''`;
     await this.sql`ALTER TABLE session_results ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT ''`;
+    await this.sql`ALTER TABLE session_results ADD COLUMN IF NOT EXISTS city_id TEXT NOT NULL DEFAULT 'default'`;
+    await this.sql`ALTER TABLE session_results ADD COLUMN IF NOT EXISTS city_name TEXT NOT NULL DEFAULT 'Metropolis'`;
+    await this.sql`ALTER TABLE session_results ADD COLUMN IF NOT EXISTS legs JSONB NOT NULL DEFAULT '[]'`;
     await this.sql`ALTER TABLE session_results DROP COLUMN IF EXISTS auto_match`;
     await this.sql`CREATE INDEX IF NOT EXISTS idx_results_user ON session_results (user_id)`;
     await this.sql`
@@ -140,14 +157,17 @@ class PostgresStore implements SessionStore {
     const s = r.scoreboard;
     await this.sql`
       INSERT INTO session_results
-        (id, user_id, creator, ticks, seed, completed, cancelled, revenue, rider_avg, driver_avg, scoreboard, config)
+        (id, user_id, creator, city_id, city_name, ticks, seed, completed, cancelled, revenue, rider_avg, driver_avg, scoreboard, config, legs)
       VALUES
-        (${r.id}, ${r.userId}, ${r.creator}, ${r.ticks}, ${r.seed}, ${s.completed}, ${s.cancelled},
-         ${s.revenue}, ${s.riderAvg}, ${s.driverAvg}, ${this.sql.json(s)}, ${this.sql.json(r.config)})
+        (${r.id}, ${r.userId}, ${r.creator}, ${r.cityId}, ${r.cityName}, ${r.ticks}, ${r.seed}, ${s.completed}, ${s.cancelled},
+         ${s.revenue}, ${s.riderAvg}, ${s.driverAvg}, ${this.sql.json(s)}, ${this.sql.json(r.config)}, ${this.sql.json(r.legs)})
       ON CONFLICT (id) DO UPDATE SET
         finished_at = now(),
         user_id     = EXCLUDED.user_id,
         creator     = EXCLUDED.creator,
+        city_id     = EXCLUDED.city_id,
+        city_name   = EXCLUDED.city_name,
+        legs        = EXCLUDED.legs,
         ticks       = EXCLUDED.ticks,
         seed        = EXCLUDED.seed,
         completed   = EXCLUDED.completed,
@@ -161,8 +181,8 @@ class PostgresStore implements SessionStore {
 
   async listResults(limit = 100): Promise<Record<string, unknown>[]> {
     const rows = await this.sql`
-      SELECT id, user_id, creator, finished_at, ticks, seed, completed, cancelled,
-             revenue, rider_avg, driver_avg, scoreboard, config
+      SELECT id, user_id, creator, city_id, city_name, finished_at, ticks, seed, completed, cancelled,
+             revenue, rider_avg, driver_avg, scoreboard, config, legs
       FROM session_results
       ORDER BY finished_at DESC
       LIMIT ${limit}`;
@@ -171,8 +191,8 @@ class PostgresStore implements SessionStore {
 
   async listResultsByUser(userId: string, limit = 100): Promise<Record<string, unknown>[]> {
     const rows = await this.sql`
-      SELECT id, user_id, creator, finished_at, ticks, seed, completed, cancelled,
-             revenue, rider_avg, driver_avg, scoreboard, config
+      SELECT id, user_id, creator, city_id, city_name, finished_at, ticks, seed, completed, cancelled,
+             revenue, rider_avg, driver_avg, scoreboard, config, legs
       FROM session_results
       WHERE user_id = ${userId}
       ORDER BY finished_at DESC
@@ -184,7 +204,7 @@ class PostgresStore implements SessionStore {
     // One row per user: their single best run (highest revenue), plus how many runs they have.
     const rows = await this.sql`
       SELECT DISTINCT ON (user_id)
-             user_id, creator, id, finished_at, revenue, completed, cancelled,
+             user_id, creator, id, city_id, city_name, finished_at, revenue, completed, cancelled,
              rider_avg, driver_avg, ticks,
              COUNT(*) OVER (PARTITION BY user_id) AS runs
       FROM session_results
@@ -244,10 +264,11 @@ class MemoryStore implements SessionStore {
   private flatten(r: SessionResult & { finished_at: string }): Record<string, unknown> {
     const s = r.scoreboard;
     return {
-      id: r.id, user_id: r.userId, creator: r.creator, finished_at: r.finished_at,
+      id: r.id, user_id: r.userId, creator: r.creator,
+      city_id: r.cityId, city_name: r.cityName, finished_at: r.finished_at,
       ticks: r.ticks, seed: r.seed, completed: s.completed, cancelled: s.cancelled,
       revenue: s.revenue, rider_avg: s.riderAvg, driver_avg: s.driverAvg,
-      scoreboard: s, config: r.config,
+      scoreboard: s, config: r.config, legs: r.legs,
     };
   }
 

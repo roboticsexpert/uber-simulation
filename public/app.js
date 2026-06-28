@@ -1,102 +1,138 @@
-/* Grid page: all worlds shown as mini-maps; click a card → its own page. */
+/*
+ * Dashboard. The game runs fast and finishes almost instantly, so worlds are no
+ * longer shown live — the dashboard is the scoreboard: the leaderboard everyone
+ * sees, plus each player's own finished runs, each with a replay to watch.
+ */
 
-let worlds = []; // [{id, ...vizState}]
-const cardCanvas = {}; // sid → canvas
+// Small fetch helper (the dashboard no longer loads render.js, which used to define this).
+const api = (p, m = "GET", body) => {
+  const auth = window.US_AUTH ? window.US_AUTH.header() : {};
+  const headers = { ...(body ? { "Content-Type": "application/json" } : {}), ...auth };
+  return fetch(p, {
+    method: m,
+    headers: Object.keys(headers).length ? headers : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  }).then((r) => r.json());
+};
 
-// Sessions are created only via code (an external matcher); this page is display-only.
-
-function frame() {
-  for (const w of worlds) {
-    const cv = cardCanvas[w.id];
-    if (cv && cv.isConnected) drawWorld(cv.getContext("2d"), cv.clientWidth, cv.clientHeight, w, 0.6);
-  }
-  requestAnimationFrame(frame);
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
-requestAnimationFrame(frame);
+const fmt = (n) => Math.round(Number(n)).toLocaleString("en-US");
+function when(ts) { try { return new Date(ts).toLocaleString("en-US"); } catch { return ts; } }
 
-// Active (running) sessions first, then waiting/idle, then finished.
-const STATUS_RANK = { running: 0, idle: 1, finished: 2 };
-function sortedWorlds() {
-  return worlds.slice().sort((a, b) => {
-    const ra = STATUS_RANK[a.status] ?? 1, rb = STATUS_RANK[b.status] ?? 1;
-    if (ra !== rb) return ra - rb;
-    return (b.scoreboard?.completed || 0) - (a.scoreboard?.completed || 0); // busier first
-  });
+// A badge for the world a run played: the gauntlet, or a single city's name.
+function worldBadge(r) {
+  const name = r.city_name || (r.city_id === "gauntlet" ? "Gauntlet" : "Metropolis");
+  const isG = r.city_id === "gauntlet";
+  return `<span class="world-badge${isG ? " gauntlet" : ""}">${isG ? "🏟 " : "🌍 "}${escapeHtml(name)}</span>`;
 }
-
-function syncCards() {
-  const grid = document.getElementById("grid");
-  const empty = grid.querySelector(".empty");
-  if (empty && worlds.length) empty.remove();
-
-  const title = document.getElementById("worlds-title");
-  if (title) title.style.display = worlds.length ? "" : "none";
-
-  const ids = new Set(worlds.map((w) => w.id));
-  for (const id of Object.keys(cardCanvas)) {
-    if (!ids.has(id)) {
-      const el = document.getElementById("card-" + id);
-      if (el) el.remove();
-      delete cardCanvas[id];
-    }
-  }
-  for (const w of sortedWorlds()) {
-    let el = document.getElementById("card-" + w.id);
-    if (!el) {
-      el = document.createElement("div");
-      el.className = "card"; el.id = "card-" + w.id;
-      el.innerHTML = `<canvas></canvas><div class="card-foot">
-        <span class="cid"></span>
-        <span class="cmaker"></span>
-        <span class="cstat"></span><span style="flex:1"></span>
-        <span class="pill idle"></span></div>`;
-      // click → its own page
-      el.onclick = () => { window.location.href = "/world.html?id=" + encodeURIComponent(w.id); };
-      grid.appendChild(el);
-      cardCanvas[w.id] = el.querySelector("canvas");
-    }
-    const sb = w.scoreboard;
-    el.querySelector(".cid").textContent = w.creator || "—";
-    el.querySelector(".cmaker").textContent = w.id;
-    el.querySelector(".cstat").textContent = `✅${sb.completed} ❌${sb.cancelled} ⭐${sb.riderAvg.toFixed(1)}`;
-    const pill = el.querySelector(".pill");
-    const waiting = w.status === "idle";
-    pill.textContent = waiting ? "waiting for matcher" : w.status;
-    pill.className = "pill " + (waiting ? "waiting" : w.status);
-    grid.appendChild(el); // re-append in sorted order (active first)
-  }
-  if (worlds.length === 0 && !grid.querySelector(".empty")) {
-    grid.innerHTML = `<div class="empty">No worlds yet. Sessions are created from code — run a sample client (Node.js or Python) to connect a matcher.</div>`;
-  }
+function replayBtn(id) {
+  return id ? `<a class="rep-btn" href="/replay.html?id=${encodeURIComponent(id)}" title="Watch replay">▶ Watch</a>` : "—";
+}
+function makerLink(r) {
+  const name = escapeHtml(r.creator || "—");
+  return r.user_id
+    ? `<a class="maker-link" href="/results.html?user=${encodeURIComponent(r.user_id)}">${name}</a>`
+    : name;
 }
 
-// Poll once per simulation cycle (cycleMs). Smooth motion between polls is done
-// client-side via interpolation (setupAnim), so polling faster just wastes bandwidth.
-// Self-scheduling loop: each request is sent only after the previous one settles,
-// so a slow server can never make requests pile up.
-// Fill the "World parameters" section on the landing page with live config values.
-// Runs once: these are fixed for the engine's lifetime.
-async function loadWorldParams() {
-  let c;
-  try { c = (await api("/config")).config; } catch { return; }
-  if (!c) return;
-  const set = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
-  const fmt = (n) => Number(n).toLocaleString("en-US");
-  const crossCycles = Math.round(c.worldWidth / c.driverSpeed); // cycles to drive across the map's width
-  set("cfg-map", `<b>${fmt(c.worldWidth)} × ${fmt(c.worldHeight)}</b> distance units — a square world. Driver positions and trip distances are measured in these units.`);
-  set("cfg-speed", `<b>${fmt(c.driverSpeed)} units</b> per game-minute (i.e. per cycle) — roughly <b>${crossCycles} cycles</b> to drive all the way across the map.`);
-  set("cfg-drivers", `<b>${fmt(c.driverCount)}</b> drivers. After <b>${c.driverIdleSleepMinutes} min</b> with no trip they sleep, then wake <b>${c.driverSleepMinutes} min</b> later.`);
-  set("cfg-demand", `~<b>${fmt(c.riderArrivalRate)}</b> new requests per cycle (Poisson). A rider waits at most <b>${c.riderPatienceMinutes} min</b> for pickup.`);
-}
-loadWorldParams();
+/* ---------- leaderboard (everyone's best run) ---------- */
 
-async function poll() {
+const LB_HEAD = `<tr>
+  <th class="num">#</th><th>Player</th><th>World</th>
+  <th class="num">💰 Best revenue</th><th class="num">✅</th><th class="num">❌</th>
+  <th class="num">⭐R</th><th class="num">⭐D</th><th class="num">Runs</th><th>Replay</th>
+</tr>`;
+
+async function loadLeaderboard() {
+  const head = document.getElementById("lb-head");
+  const body = document.getElementById("lb-rows");
+  if (!body) return;
+  head.innerHTML = LB_HEAD;
+  let rows = [];
   try {
-    const r = await api("/sessions");
-    worlds = r.sessions || [];
-    for (const w of worlds) setupAnim(w);
-    syncCards();
-  } catch (e) { /* engine is not up */ }
-  setTimeout(poll, 800);
+    rows = (await api("/leaderboard?limit=50")).leaderboard || [];
+  } catch {
+    body.innerHTML = `<tr><td colspan="10" class="tbl-empty">Engine not reachable.</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.length
+    ? rows.map((r, i) => `<tr>
+        <td class="num rank">${i + 1}</td>
+        <td>${makerLink(r)}</td>
+        <td>${worldBadge(r)}</td>
+        <td class="num">${fmt(r.revenue)}</td>
+        <td class="num good">${r.completed}</td>
+        <td class="num bad">${r.cancelled}</td>
+        <td class="num">${Number(r.rider_avg).toFixed(2)}</td>
+        <td class="num">${Number(r.driver_avg).toFixed(2)}</td>
+        <td class="num runs">${r.runs ?? 1}</td>
+        <td>${replayBtn(r.id)}</td>
+      </tr>`).join("")
+    : `<tr><td colspan="10" class="tbl-empty">No finished runs yet — run a client to get on the board.</td></tr>`;
 }
-poll();
+
+/* ---------- your runs (logged-in player's finished runs + replays) ---------- */
+
+const MY_HEAD = `<tr>
+  <th class="sid">Session</th><th>World</th>
+  <th class="num">💰 Revenue</th><th class="num">✅</th><th class="num">❌</th>
+  <th class="num">⭐R</th><th class="num">⭐D</th><th>When</th><th>Replay</th>
+</tr>`;
+
+async function loadMyRuns() {
+  const section = document.getElementById("myruns-section");
+  if (!section) return;
+  const loggedIn = window.US_AUTH && US_AUTH.id;
+  section.style.display = loggedIn ? "" : "none";
+  if (!loggedIn) return;
+  const head = document.getElementById("my-head");
+  const body = document.getElementById("my-rows");
+  head.innerHTML = MY_HEAD;
+  let rows = [];
+  try {
+    rows = (await api(`/results?user=${encodeURIComponent(US_AUTH.id)}&limit=50`)).results || [];
+  } catch { return; }
+  body.innerHTML = rows.length
+    ? rows.map((r) => `<tr>
+        <td class="sid">${escapeHtml(r.id)}</td>
+        <td>${worldBadge(r)}</td>
+        <td class="num">${fmt(r.revenue)}</td>
+        <td class="num good">${r.completed}</td>
+        <td class="num bad">${r.cancelled}</td>
+        <td class="num">${Number(r.rider_avg).toFixed(2)}</td>
+        <td class="num">${Number(r.driver_avg).toFixed(2)}</td>
+        <td class="when">${when(r.finished_at)}</td>
+        <td>${replayBtn(r.id)}</td>
+      </tr>`).join("")
+    : `<tr><td colspan="9" class="tbl-empty">You have no finished runs yet — run your matcher with your token.</td></tr>`;
+}
+
+async function loadBoard() {
+  await Promise.all([loadLeaderboard(), loadMyRuns()]);
+}
+
+/* ---------- "The cities" guide section ---------- */
+
+async function loadCities() {
+  const box = document.getElementById("cities-list");
+  if (!box) return;
+  let cities = [], base = {};
+  try {
+    cities = (await api("/cities")).cities || [];
+    base = (await api("/config")).config || {};
+  } catch { return; }
+  box.innerHTML = cities.map((c) => {
+    const e = { ...base, ...c.overrides }; // effective params = base config + this city's overrides
+    return `<div class="rule"><span class="k">🌍 ${escapeHtml(c.name)}</span>
+      <span class="v">${escapeHtml(c.description)}<br>
+      <b>${fmt(e.worldWidth)}×${fmt(e.worldHeight)}</b> map · <b>${fmt(e.driverCount)}</b> drivers ·
+      ~<b>${fmt(e.riderArrivalRate)}</b> requests/cycle · <b>${e.riderPatienceMinutes} min</b> patience</span></div>`;
+  }).join("");
+}
+
+if (window.US_AUTH) US_AUTH.onChange(loadBoard); // refresh "your runs" on login/logout
+loadBoard();
+loadCities();
+setInterval(loadBoard, 4000); // runs finish quickly — keep the board fresh

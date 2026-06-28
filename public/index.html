@@ -32,6 +32,12 @@
     .card-foot .cid { font-weight: 800; }
     .card-foot .cmaker { color: var(--muted); font-size: 11px; }
     .card-foot .cstat { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .card-world { display: flex; align-items: center; gap: 8px; padding: 6px 10px 0; font-size: 11px; }
+    .card-world .cw-name { color: var(--accent); font-weight: 700; }
+    .legbar { display: flex; gap: 3px; flex: 1; }
+    .legbar i { height: 4px; flex: 1; background: var(--line); border-radius: 2px; }
+    .legbar i.done { background: var(--idle); }
+    .legbar i.cur { background: var(--accent); }
     .empty { color: var(--muted); padding: 40px; text-align: center; grid-column: 1/-1; }
     .section-title { font-size: 15px; font-weight: 800; margin: 4px 0 12px; }
 
@@ -72,19 +78,58 @@
     table.rate th { background: #11161c; font-weight: 700; }
     table.rate td.stars { color: var(--accent); white-space: nowrap; }
     @media (max-width: 560px) { .rule { grid-template-columns: 1fr; gap: 2px; } }
+
+    /* scoreboard tables */
+    .board-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 12px; }
+    .wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; margin-bottom: 8px; }
+    table.board-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.board-tbl th, table.board-tbl td { padding: 10px 12px; text-align: start; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    table.board-tbl th { color: var(--muted); font-weight: 700; font-size: 12px; }
+    table.board-tbl tr:last-child td { border-bottom: none; }
+    table.board-tbl td.num, table.board-tbl th.num { text-align: end; font-variant-numeric: tabular-nums; }
+    .rank { font-weight: 800; color: var(--accent); }
+    .runs { color: var(--muted); font-size: 12px; }
+    .good { color: var(--idle); } .bad { color: var(--dest); }
+    .sid { color: var(--muted); font-size: 11px; }
+    .when { color: var(--muted); font-size: 11px; }
+    .world-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 12px; background: #11161c; border: 1px solid var(--line); color: var(--muted); }
+    .world-badge.gauntlet { background: #2a1f3d; border-color: #4a2f6b; color: #d8c2f3; }
+    .rep-btn { font-weight: 700; text-decoration: none; color: var(--accent); }
+    .rep-btn:hover { text-decoration: underline; }
+    a.maker-link { color: inherit; text-decoration: none; font-weight: 800; }
+    a.maker-link:hover { text-decoration: underline; }
+    .tbl-empty { color: var(--muted); padding: 24px; text-align: center; }
   </style>
 </head>
 <body>
   <header>
     <h1>🚕 Multi-World Arena</h1>
-    <span class="sub">Multiple Uber worlds running at once</span>
+    <span class="sub">Leaderboard &amp; replays</span>
     <span class="spacer"></span>
     <div id="authbar"></div>
-    <a class="navlink" href="/results.html">🏆 Results</a>
+    <a class="navlink" href="/results.html">🏆 Full results</a>
   </header>
 
-  <h2 class="section-title" id="worlds-title" style="display:none">🟢 Live worlds</h2>
-  <div id="grid"><div class="empty">No worlds yet. Sessions are created from code — run a sample client (Node.js or Python) to connect a matcher.</div></div>
+  <div class="board-head">
+    <h2 class="section-title" style="margin:0">🏆 Leaderboard</h2>
+    <a class="navlink" href="/results.html">All submissions →</a>
+  </div>
+  <div class="wrap">
+    <table class="board-tbl">
+      <thead id="lb-head"></thead>
+      <tbody id="lb-rows"><tr><td class="tbl-empty">loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <section id="myruns-section" style="display:none">
+    <h2 class="section-title" style="margin-top:24px">🎬 Your runs &amp; replays</h2>
+    <div class="wrap">
+      <table class="board-tbl">
+        <thead id="my-head"></thead>
+        <tbody id="my-rows"></tbody>
+      </table>
+    </div>
+  </section>
 
   <section class="intro">
     <h2>🚕 What's the story?</h2>
@@ -95,8 +140,8 @@
     <p>
       The game engine simulates a real world: drivers move, riders make requests,
       and fares, ratings, and driver fatigue are all computed. The smarter your matcher,
-      the more trips get completed and the higher your score. You can watch each world's live map and
-      scoreboard at the top of this page.
+      the more trips get completed and the higher your score. Runs finish in moments, then
+      land on the <b>leaderboard</b> above — and you can watch a full <b>replay</b> of any run.
     </p>
 
     <h2>📋 Rules &amp; scoring</h2>
@@ -133,29 +178,27 @@
     <div class="rules">
       <div class="rule"><span class="k">⏱️ One cycle</span><span class="v">represents <b>1 game-minute</b>. Every rule time is in game-minutes — so the 5-minute pickup cap is 5 cycles, and the 30-minute sleep is 30 cycles.</span></div>
       <div class="rule"><span class="k">⚡ Full speed</span><span class="v">The arena runs <b>as fast as your matcher answers</b> — the world advances the instant you submit, not on a fixed clock. Answer faster, finish sooner. (A slow/dead client is auto-advanced after a timeout so it can't stall.)</span></div>
-      <div class="rule"><span class="k">🏁 Session length</span><span class="v"><b>240 cycles</b> (= 4 game-hours). When the last cycle runs, the world finishes and is saved to the <a href="/results.html">Results</a> board.</span></div>
-      <div class="rule"><span class="k">🧍 Each cycle</span><span class="v">About <b>10 new ride requests</b> appear (on average), in a world of <b>100 drivers</b>.</span></div>
+      <div class="rule"><span class="k">🏁 Run length</span><span class="v">Each city runs <b>240 cycles</b> (= 4 game-hours); your matcher plays <b>every city in turn</b> on one connection. When the last city's last cycle runs, the run finishes and its <b>combined total</b> is saved to the <a href="/results.html">Results</a> board.</span></div>
+      <div class="rule"><span class="k">🧍 Each cycle</span><span class="v">New ride requests appear (Poisson). <b>How many — and how many drivers exist — varies by city</b>; see “The cities” below.</span></div>
       <div class="rule"><span class="k">⚡ Your turn</span><span class="v">Send your assignments for the current tick; the engine immediately advances. Assignments tagged with an outdated tick are rejected.</span></div>
     </div>
     <p class="lead" style="margin:0 0 4px; font-size:12.5px">(These are the engine's current settings and can be tuned server-side.)</p>
 
-    <h2>🌍 World parameters</h2>
+    <h2>🏟 The cities</h2>
     <p class="lead" style="margin:0 0 10px">
-      The physical layout of the world. It's identical for every session (one global seed), so matchers
-      compete on the same map and demand — only the matching decisions differ. Loaded live from the engine:
+      Every run is a <b>gauntlet</b>: your matcher plays all of these cities back-to-back on one connection,
+      and your score is the <b>combined total</b> across them. Each city is a different world — its own map size,
+      demand, and driver pool — so a strong matcher has to adapt. Loaded live from the engine:
     </p>
-    <div class="rules" id="world-params">
-      <div class="rule"><span class="k">🗺️ Map size</span><span class="v" id="cfg-map">…</span></div>
-      <div class="rule"><span class="k">🚗 Driver speed</span><span class="v" id="cfg-speed">…</span></div>
-      <div class="rule"><span class="k">🧑‍✈️ Drivers</span><span class="v" id="cfg-drivers">…</span></div>
-      <div class="rule"><span class="k">🧍 Demand</span><span class="v" id="cfg-demand">…</span></div>
+    <div class="rules" id="cities-list">
+      <div class="rule"><span class="k">…</span><span class="v">loading cities…</span></div>
     </div>
 
     <h2>🎮 How do I play?</h2>
     <div class="steps">
       <div class="step"><div class="t"><span class="n">1</span>Create an account</div><div class="d">Register up top with a <b>username + password</b>. You get a personal <b>API token</b> — your client uses it to prove which player it is.</div></div>
       <div class="step"><div class="t"><span class="n">2</span>Get the sample code</div><div class="d">Clone the repo from GitHub. A ready-to-run client is included for both <b>Node.js</b> and <b>Python</b>.</div></div>
-      <div class="step"><div class="t"><span class="n">3</span>Write your algorithm</div><div class="d">Change only the <code>decide()</code> function, run with your token — your world shows up here and your runs land on your <a href="/results.html">scoreboard</a>.</div></div>
+      <div class="step"><div class="t"><span class="n">3</span>Write your algorithm</div><div class="d">Change only the <code>decide()</code> function, run with your token — your run lands on the <b>leaderboard</b> above, and you can watch its <b>replay</b>.</div></div>
     </div>
 
     <div class="score-callout">
@@ -183,7 +226,7 @@ TOKEN=your_api_token python sample_client.py</pre>
       </div>
     </div>
     <p class="lead" style="margin:12px 0 0; font-size:13px">
-      On start, the client prints a link to your live world — and your map appears in the arena at the top of this page.
+      The run finishes in moments and lands on the <b>leaderboard</b> at the top of this page, where you can watch its replay.
       Then open the sample client and change the <code>decide()</code> function to write your own matching strategy.
     </p>
 
@@ -194,7 +237,6 @@ TOKEN=your_api_token python sample_client.py</pre>
   </section>
 
   <script src="/auth.js"></script>
-  <script src="/render.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

@@ -37,6 +37,18 @@
     .pill { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; }
     .pill.running { background: #1f6f3f; } .pill.idle { background: #44403c; } .pill.finished { background: #1f4f8f; }
     .pill.waiting { background: #6b4e16; color: #f3d291; }
+    .pill.gauntlet { background: #4a2f6b; color: #d8c2f3; margin-inline-start: 6px; }
+    .legbar { display: flex; gap: 3px; margin: 8px 0 4px; }
+    .legbar i { height: 5px; flex: 1; background: var(--line); border-radius: 2px; }
+    .legbar i.done { background: var(--idle); } .legbar i.cur { background: var(--accent); }
+    .stat b.city { color: var(--accent); }
+    .breakdown { margin-top: 16px; }
+    .breakdown h4 { margin: 0 0 8px; font-size: 12px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+    table.legs { width: 100%; border-collapse: collapse; font-size: 12px; }
+    table.legs th, table.legs td { padding: 5px 6px; text-align: right; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+    table.legs th { color: var(--muted); font-weight: 700; }
+    table.legs td.city, table.legs th.city { text-align: left; }
+    table.legs tr.cur td { color: var(--accent); }
   </style>
 </head>
 <body>
@@ -52,13 +64,25 @@
     <canvas id="canvas"></canvas>
     <div id="side">
       <div class="stat"><span>👤 Creator</span><b id="creator">—</b></div>
+      <div class="stat"><span>🌍 City</span><b id="worldname" class="city">—</b></div>
+      <div id="legwrap" style="display:none">
+        <div class="legbar" id="legbar"></div>
+      </div>
       <div class="stat"><span>cycle</span><b id="tick" dir="ltr">0 / 0</b></div>
       <div class="stat"><span>Game minute</span><b id="minute">0</b></div>
-      <div class="stat"><span>✅ Completed</span><b id="completed">0</b></div>
+      <div class="stat"><span id="scope-label">✅ Completed</span><b id="completed">0</b></div>
       <div class="stat"><span>❌ Cancelled</span><b id="cancelled">0</b></div>
       <div class="stat"><span>⭐ Rider rating</span><b id="riderAvg">0.00</b></div>
       <div class="stat"><span>⭐ Driver rating</span><b id="driverAvg">0.00</b></div>
       <div class="stat"><span>💰 Revenue</span><b id="revenue">0</b></div>
+
+      <div class="breakdown" id="breakdown" style="display:none">
+        <h4>Per-city breakdown</h4>
+        <table class="legs">
+          <thead><tr><th class="city">City</th><th>✅</th><th>❌</th><th>💰</th></tr></thead>
+          <tbody id="legrows"></tbody>
+        </table>
+      </div>
       <div class="legend">
         <div><span class="dot" style="background:var(--idle)"></span>🚕 Idle</div>
         <div><span class="dot" style="background:var(--accent)"></span>🚕 En route to rider</div>

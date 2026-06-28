@@ -1,4 +1,4 @@
-import { config } from "./config.js";
+import type { Config } from "./config.js";
 import { distance, moveToward, ratingFromMinutes } from "./geometry.js";
 import type {
   Assignment,
@@ -37,11 +37,14 @@ export class World {
 
   private rng: () => number;
   private nextTripId = 1;
-  private readonly mpt = config.minutesPerTick;
+  /** Game minutes per tick — a getter so it reads the (constructor-assigned) config. */
+  private get mpt(): number {
+    return this.cfg.minutesPerTick;
+  }
 
-  constructor() {
-    this.rng = makeRng(config.seed);
-    for (let i = 0; i < config.driverCount; i++) {
+  constructor(private cfg: Config) {
+    this.rng = makeRng(cfg.seed);
+    for (let i = 0; i < cfg.driverCount; i++) {
       const id = `d${i + 1}`;
       this.drivers.set(id, {
         id,
@@ -62,8 +65,8 @@ export class World {
 
   private randomPoint(): Vec2 {
     return {
-      x: this.rng() * config.worldWidth,
-      y: this.rng() * config.worldHeight,
+      x: this.rng() * this.cfg.worldWidth,
+      y: this.rng() * this.cfg.worldHeight,
     };
   }
 
@@ -99,14 +102,19 @@ export class World {
     return {
       tick: this.tick,
       minute: this.minute,
-      sessionTicks: config.sessionTicks,
+      sessionTicks: this.cfg.sessionTicks,
+      // Single-leg defaults; the Engine overrides these with real gauntlet context.
+      leg: 1,
+      totalLegs: 1,
+      cityId: "",
+      cityName: "",
       config: {
-        worldWidth: config.worldWidth,
-        worldHeight: config.worldHeight,
-        driverSpeed: config.driverSpeed,
-        riderPatienceMinutes: config.riderPatienceMinutes,
-        baseFare: config.baseFare,
-        perDistanceFare: config.perDistanceFare,
+        worldWidth: this.cfg.worldWidth,
+        worldHeight: this.cfg.worldHeight,
+        driverSpeed: this.cfg.driverSpeed,
+        riderPatienceMinutes: this.cfg.riderPatienceMinutes,
+        baseFare: this.cfg.baseFare,
+        perDistanceFare: this.cfg.perDistanceFare,
       },
       idleDrivers,
       openRequests,
@@ -165,7 +173,7 @@ export class World {
   }
 
   private moveDrivers(): void {
-    const step = config.driverSpeed * this.mpt;
+    const step = this.cfg.driverSpeed * this.mpt;
     for (const driver of this.drivers.values()) {
       if (driver.state !== "ON_TRIP" || !driver.tripId) continue;
       const trip = this.trips.get(driver.tripId);
@@ -197,7 +205,7 @@ export class World {
         // reached the destination → end of trip
         trip.completedTick = this.tick;
         trip.state = "COMPLETED";
-        trip.fare = config.baseFare + config.perDistanceFare * distance(trip.origin, trip.destination);
+        trip.fare = this.cfg.baseFare + this.cfg.perDistanceFare * distance(trip.origin, trip.destination);
         this.scoreboard.completed++;
         this.scoreboard.revenue += trip.fare;
         driver.state = "IDLE";
@@ -214,7 +222,7 @@ export class World {
     for (const trip of this.trips.values()) {
       if (trip.state !== "REQUESTED" && trip.state !== "ASSIGNED") continue;
       const waited = (this.tick - trip.requestedTick) * this.mpt;
-      if (waited <= config.riderPatienceMinutes) continue;
+      if (waited <= this.cfg.riderPatienceMinutes) continue;
       // the rider ran out of patience and still hasn't been picked up → cancel
       trip.state = "CANCELLED";
       this.scoreboard.cancelled++;
@@ -234,8 +242,8 @@ export class World {
   }
 
   private processSleepWake(): void {
-    const idleLimit = config.driverIdleSleepMinutes;
-    const sleepTicks = Math.round(config.driverSleepMinutes / this.mpt);
+    const idleLimit = this.cfg.driverIdleSleepMinutes;
+    const sleepTicks = Math.round(this.cfg.driverSleepMinutes / this.mpt);
     for (const driver of this.drivers.values()) {
       if (driver.state === "IDLE") {
         const idleFor = (this.tick - driver.lastTripTick) * this.mpt;
@@ -254,7 +262,7 @@ export class World {
   }
 
   private spawnRequests(): void {
-    const n = this.poisson(config.riderArrivalRate);
+    const n = this.poisson(this.cfg.riderArrivalRate);
     for (let i = 0; i < n; i++) {
       const id = `t${this.nextTripId++}`;
       this.trips.set(id, {

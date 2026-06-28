@@ -36,9 +36,13 @@ function updatePanel() {
     if (world.status === "finished") { rl.style.display = ""; rl.href = "/replay.html?id=" + encodeURIComponent(ID); }
     else rl.style.display = "none";
   }
-  const sb = world.scoreboard;
+  const isGauntlet = (world.totalLegs || 1) > 1;
+  // Headline numbers are the combined total across all cities (the session's score).
+  const sb = world.total || world.scoreboard;
   setText("creator", world.creator || "—");
   setText("title", "🌍 " + (world.creator ? world.creator + " · " + ID : ID));
+  setText("worldname", isGauntlet ? `${world.currentCityName} · leg ${world.leg}/${world.totalLegs}` : (world.cityName || "—"));
+  setText("scope-label", isGauntlet ? "✅ Completed (all cities)" : "✅ Completed");
   setText("tick", `${world.tick} / ${world.sessionTicks}`);
   setText("minute", world.minute);
   setText("completed", sb.completed);
@@ -46,6 +50,42 @@ function updatePanel() {
   setText("riderAvg", sb.riderAvg.toFixed(2));
   setText("driverAvg", sb.driverAvg.toFixed(2));
   setText("revenue", Math.round(sb.revenue));
+
+  // Gauntlet leg progress bar.
+  const legwrap = document.getElementById("legwrap");
+  if (legwrap) {
+    legwrap.style.display = isGauntlet ? "" : "none";
+    if (isGauntlet) {
+      const bar = document.getElementById("legbar");
+      let seg = "";
+      for (let i = 1; i <= world.totalLegs; i++) {
+        const cls = world.status === "finished" || i < world.leg ? "done" : i === world.leg ? "cur" : "";
+        seg += `<i class="${cls}"></i>`;
+      }
+      bar.innerHTML = seg;
+    }
+  }
+
+  // Per-city breakdown table.
+  const breakdown = document.getElementById("breakdown");
+  if (breakdown) {
+    const legs = world.legBreakdown || [];
+    breakdown.style.display = isGauntlet ? "" : "none";
+    if (isGauntlet) {
+      document.getElementById("legrows").innerHTML = legs.map((l) => {
+        const cur = l.leg === world.leg && world.status !== "finished";
+        const s = l.scoreboard;
+        return `<tr class="${cur ? "cur" : ""}">
+          <td class="city">${cur ? "▶ " : ""}${escapeHtmlW(l.cityName)}</td>
+          <td>${s.completed}</td><td>${s.cancelled}</td><td>${Math.round(s.revenue)}</td>
+        </tr>`;
+      }).join("");
+    }
+  }
+}
+
+function escapeHtmlW(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
 // Poll once per simulation cycle (cycleMs). Smooth motion between polls is done

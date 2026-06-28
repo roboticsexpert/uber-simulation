@@ -48,6 +48,16 @@ export interface WorldSnapshot {
   tick: number;
   minute: number;
   sessionTicks: number;
+  /**
+   * Gauntlet context: which city/leg the matcher is currently playing.
+   * `leg` is 1-based; in a single-city session `leg` is 1 and `totalLegs` is 1.
+   * `tick` resets to 0 at the start of each leg, so a matcher that tracks tick
+   * continuity should watch `leg`/`cityId` to detect a new world.
+   */
+  leg: number;
+  totalLegs: number;
+  cityId: string;
+  cityName: string;
   config: {
     worldWidth: number;
     worldHeight: number;

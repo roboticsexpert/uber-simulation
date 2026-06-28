@@ -1,5 +1,5 @@
-import { Engine } from "./engine.js";
-import { config } from "./config.js";
+import { Engine, type Leg } from "./engine.js";
+import { config, cities, resolveConfig } from "./config.js";
 import type { SessionResult, SessionStore } from "./store.js";
 
 const MAX_SESSIONS = 16;
@@ -17,8 +17,10 @@ function randomName(): string {
 
 /**
  * Keeps several independent Engines running at the same time.
- * All sessions use one global config (the same seed and parameters),
- * so they have the same initial world and demand; their only difference comes from the Matcher's decisions.
+ * Each session runs a chosen "city" — a named bundle of simulation parameters
+ * (map size, demand, driver count, seed, …). Two sessions on the same city share
+ * the same initial world and demand, so their only difference comes from the
+ * Matcher's decisions; different cities are entirely different worlds to test in.
  */
 export class SessionManager {
   private sessions = new Map<string, Engine>();
@@ -29,13 +31,23 @@ export class SessionManager {
 
   constructor(private store: SessionStore) {}
 
+  /**
+   * Create a session. Every session is a gauntlet: the matcher plays all
+   * registered cities in order, one after another on the same connection, and
+   * the combined total across every city is the final result.
+   */
   create(user: { id: string; username: string }): { id: string; engine: Engine } {
     if (this.sessions.size >= MAX_SESSIONS) {
       throw new Error(`the limit of ${MAX_SESSIONS} sessions is full`);
     }
     let id = randomName();
     while (this.sessions.has(id)) id = randomName(); // avoid collisions
-    const engine = new Engine();
+    const legs: Leg[] = cities.map((c) => ({
+      cityId: c.id,
+      cityName: c.name,
+      cfg: resolveConfig(c.id),
+    }));
+    const engine = new Engine(legs);
     engine.creator = user.username; // owner's display name
     engine.userId = user.id; // owning user (every session belongs to a logged-in user)
     // When the session finishes: archive the result, then remove it from the Map to free memory.
@@ -44,7 +56,7 @@ export class SessionManager {
         console.error(`failed to save result for session ${id}:`, e),
       );
       // Archive the frame-by-frame recording so the run can be replayed later.
-      if (config.recordReplays) {
+      if (engine.config.recordReplays) {
         this.store.saveReplay(id, engine.replay()).catch((e) =>
           console.error(`failed to save replay for session ${id}:`, e),
         );
@@ -74,17 +86,24 @@ export class SessionManager {
     this.evictionTimers.set(id, timer);
   }
 
-  /** Builds the session's final result from the engine's current state. */
+  /**
+   * Builds the session's final result. The archived scoreboard is the **combined
+   * total across every city**, and `legs` carries the per-city breakdown so a run
+   * can be analysed city by city.
+   */
   private buildResult(id: string, engine: Engine): SessionResult {
     const v = engine.vizState();
     return {
       id,
       userId: engine.userId,
       creator: engine.creator,
+      cityId: engine.cityId,
+      cityName: engine.cityName,
       ticks: v.tick,
-      seed: config.seed,
-      scoreboard: v.scoreboard,
-      config: { ...config },
+      seed: engine.config.seed,
+      scoreboard: engine.total(), // sum across all legs — the session's actual score
+      legs: engine.legBreakdown(),
+      config: { ...engine.config },
     };
   }
 

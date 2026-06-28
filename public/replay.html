@@ -21,7 +21,7 @@
     .spacer { flex: 1; }
     a.back { font-family: var(--font); border-radius: 7px; padding: 8px 13px; font-weight: 700; cursor: pointer; font-size: 13px; text-decoration: none; background: transparent; color: var(--text); border: 1px solid var(--line); }
     .pill { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; background: #6f42c1; }
-    main { flex: 1; display: flex; min-height: 0; }
+    main { flex: 1; display: flex; min-height: 0; position: relative; }
     #canvas { flex: 1; min-width: 0; min-height: 0; display: block; background: #11161c; }
     #side { width: 250px; border-inline-end: 1px solid var(--line); padding: 16px; overflow: auto; }
     .stat { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
@@ -29,6 +29,15 @@
     .stat b { font-variant-numeric: tabular-nums; }
     .legend { display: flex; flex-direction: column; gap: 7px; font-size: 12px; margin-top: 14px; }
     .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-inline-end: 7px; }
+    .stat b.city { color: var(--accent); }
+    .legbar { display: flex; gap: 3px; margin: 8px 0 4px; }
+    .legbar i { height: 5px; flex: 1; background: var(--line); border-radius: 2px; }
+    .legbar i.done { background: var(--idle); } .legbar i.cur { background: var(--accent); }
+    /* City-change banner over the map */
+    #citybanner { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); background: rgba(26,33,43,.92);
+      border: 1px solid var(--accent); color: var(--text); padding: 7px 16px; border-radius: 999px; font-weight: 800;
+      font-size: 14px; pointer-events: none; opacity: 0; transition: opacity .35s; white-space: nowrap; }
+    #citybanner.show { opacity: 1; }
 
     /* transport bar */
     .transport { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--line); background: var(--panel); }
@@ -49,8 +58,11 @@
   </header>
   <main>
     <canvas id="canvas"></canvas>
+    <div id="citybanner"></div>
     <div id="side">
       <div class="stat"><span>👤 Creator</span><b id="creator">—</b></div>
+      <div class="stat" id="cityrow" style="display:none"><span>🌍 City</span><b id="worldname" class="city">—</b></div>
+      <div id="legwrap" style="display:none"><div class="legbar" id="legbar"></div></div>
       <div class="stat"><span>cycle</span><b id="tick" dir="ltr">0 / 0</b></div>
       <div class="stat"><span>Game minute</span><b id="minute">0</b></div>
       <div class="stat"><span>✅ Completed</span><b id="completed">0</b></div>

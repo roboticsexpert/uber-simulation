@@ -21,15 +21,24 @@ let view = params.get("me") ? "me"
 const userParam = params.get("user") || "";
 
 const HEAD_LEADERBOARD = `<tr>
-  <th class="num">#</th><th>Player</th>
+  <th class="num">#</th><th>Player</th><th>World</th>
   <th class="num">💰 Best revenue</th><th class="num">✅ Completed</th><th class="num">❌ Cancelled</th>
   <th class="num">⭐ Rider</th><th class="num">⭐ Driver</th><th class="num">Runs</th>
 </tr>`;
 const HEAD_RUNS = `<tr>
-  <th class="num">#</th><th>Player</th><th class="sid">Session</th>
+  <th class="num">#</th><th>Player</th><th class="sid">Session</th><th>World</th>
   <th class="num">💰 Revenue</th><th class="num">✅ Completed</th><th class="num">❌ Cancelled</th>
   <th class="num">⭐ Rider</th><th class="num">⭐ Driver</th><th class="num">cycle</th><th>Time</th>
 </tr>`;
+
+// A small badge for the world a run played: the gauntlet, or a single city's name.
+function worldBadge(r) {
+  const name = r.city_name || (r.city_id === "gauntlet" ? "Gauntlet" : "Metropolis");
+  const isG = r.city_id === "gauntlet";
+  const legCount = Array.isArray(r.legs) ? r.legs.length : 0;
+  const title = isG && legCount ? `Gauntlet of ${legCount} cities` : esc(name);
+  return `<span class="world-badge${isG ? " gauntlet" : ""}" title="${title}">${isG ? "🏟 " : "🌍 "}${esc(name)}</span>`;
+}
 
 function makerLink(r) {
   const name = esc(r.creator || "—");
@@ -46,6 +55,7 @@ function leaderboardRow(r, i) {
   return `<tr>
     <td class="num rank">${i + 1}</td>
     <td><span class="maker">${makerLink(r)}</span> ${replayLink(r, "▶")}</td>
+    <td>${worldBadge(r)}</td>
     <td class="num">${fmt(r.revenue)}</td>
     <td class="num good">${r.completed}</td>
     <td class="num bad">${r.cancelled}</td>
@@ -60,6 +70,7 @@ function runRow(r, i) {
     <td class="num rank">${i + 1}</td>
     <td><span class="maker">${makerLink(r)}</span></td>
     <td class="sid">${replayLink(r, "▶ " + esc(r.id))}</td>
+    <td>${worldBadge(r)}</td>
     <td class="num">${fmt(r.revenue)}</td>
     <td class="num good">${r.completed}</td>
     <td class="num bad">${r.cancelled}</td>
@@ -92,7 +103,7 @@ async function load() {
       const rows = (await api("/leaderboard?limit=100")).leaderboard || [];
       tbody.innerHTML = rows.length
         ? rows.map(leaderboardRow).join("")
-        : '<tr><td colspan="8" class="empty">No finished sessions yet.</td></tr>';
+        : '<tr><td colspan="9" class="empty">No finished sessions yet.</td></tr>';
       return;
     }
 
@@ -101,7 +112,7 @@ async function load() {
     if (view === "me") {
       if (!(window.US_AUTH && US_AUTH.id)) {
         subtitle.textContent = "";
-        tbody.innerHTML = '<tr><td colspan="10" class="empty">Log in (top right) to see your runs.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="empty">Log in (top right) to see your runs.</td></tr>';
         return;
       }
       path = `/results?user=${encodeURIComponent(US_AUTH.id)}&limit=200`;
@@ -115,9 +126,9 @@ async function load() {
     const rows = (await api(path)).results || [];
     tbody.innerHTML = rows.length
       ? rows.map(runRow).join("")
-      : '<tr><td colspan="10" class="empty">No finished sessions yet.</td></tr>';
+      : '<tr><td colspan="11" class="empty">No finished sessions yet.</td></tr>';
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="10" class="empty">Error fetching results (is the engine up?).</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="empty">Error fetching results (is the engine up?).</td></tr>';
   }
 }
 

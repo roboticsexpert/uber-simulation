@@ -7,6 +7,7 @@ const DEST_COLOR = "#f85149";
 const anim = {}; // `${sid}:${did}` → { fx,fy,tx,ty,start,dur }
 const heading = {};
 const lastTick = {}; // sid → last tick seen
+const lastLeg = {}; // sid → last gauntlet leg seen
 
 const api = (p, m = "GET", body) => {
   const auth = window.US_AUTH ? window.US_AUTH.header() : {};
@@ -37,9 +38,13 @@ function worldPos(key, fallback) {
 /** When a world's tick changes, set each car's animation target (mirroring the engine's logic). */
 function setupAnim(w) {
   if (w.tick === lastTick[w.id]) return;
-  // First time we see this world: cars snap immediately to their real positions (no entry glide)
-  const firstSight = lastTick[w.id] === undefined;
+  // A new gauntlet leg is a brand-new world (different city, fresh cars) — snap, don't glide.
+  const leg = w.leg ?? 1;
+  const legChanged = lastLeg[w.id] !== undefined && lastLeg[w.id] !== leg;
+  // First time we see this world (or a new leg): cars snap immediately to their real positions.
+  const firstSight = lastTick[w.id] === undefined || legChanged;
   lastTick[w.id] = w.tick;
+  lastLeg[w.id] = leg;
   // The engine sends stepPerCycle (= driverSpeed × minutesPerTick); fall back to the
   // current default driver speed if an old payload lacks it (was 8 in the legacy tiny world).
   const step = w.stepPerCycle || 650;

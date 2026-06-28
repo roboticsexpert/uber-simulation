@@ -63,6 +63,92 @@ export const config = {
   port: num("PORT", 8080),
   /** Seed for scenario reproducibility (competition fairness). */
   seed: num("SEED", 42),
-} as const;
+};
 
+/**
+ * A full set of simulation parameters. Every value is a plain number so a city
+ * preset (below) can override any subset of them.
+ */
 export type Config = typeof config;
+
+/**
+ * A named "city": a baseline-plus-overrides world flavour. Only the parameters
+ * that differ from {@link config} are listed in `overrides`; everything else
+ * falls back to the default. Each city carries its own `seed` so that everyone
+ * who tests against the same city gets the exact same demand and initial world —
+ * which keeps cross-matcher comparison within a city fair and reproducible.
+ */
+export interface City {
+  id: string;
+  name: string;
+  description: string;
+  overrides: Partial<Config>;
+}
+
+export const cities: City[] = [
+  {
+    id: "default",
+    name: "Metropolis",
+    description: "Balanced baseline — the original tuning, a fair all-rounder.",
+    overrides: {},
+  },
+  {
+    id: "manhattan",
+    name: "Manhattan",
+    description: "Dense core: small map, heavy demand, many drivers, impatient riders.",
+    overrides: {
+      worldWidth: 4_000,
+      worldHeight: 4_000,
+      driverCount: 120,
+      riderArrivalRate: 18,
+      riderPatienceMinutes: 3,
+      seed: 101,
+    },
+  },
+  {
+    id: "suburb",
+    name: "Suburbia",
+    description: "Sprawling and sparse: big map, light demand, few scattered drivers.",
+    overrides: {
+      worldWidth: 12_000,
+      worldHeight: 12_000,
+      driverCount: 40,
+      riderArrivalRate: 5,
+      riderPatienceMinutes: 6,
+      seed: 202,
+    },
+  },
+  {
+    id: "rush-hour",
+    name: "Rush Hour",
+    description: "Demand spike with thin patience — queueing and prioritization under load.",
+    overrides: {
+      driverCount: 70,
+      riderArrivalRate: 28,
+      riderPatienceMinutes: 2,
+      seed: 303,
+    },
+  },
+  {
+    id: "night-shift",
+    name: "Night Shift",
+    description: "Scarce supply: few drivers, long sleeps, scattered demand.",
+    overrides: {
+      driverCount: 30,
+      riderArrivalRate: 6,
+      driverIdleSleepMinutes: 20,
+      driverSleepMinutes: 90,
+      seed: 404,
+    },
+  },
+];
+
+/** Look up a city by id, falling back to the first (default) city. */
+export function getCity(cityId?: string): City {
+  return cities.find((c) => c.id === cityId) ?? cities[0];
+}
+
+/** Build the full Config for a city: the base config with that city's overrides applied. */
+export function resolveConfig(cityId?: string): Config {
+  return { ...config, ...getCity(cityId).overrides };
+}

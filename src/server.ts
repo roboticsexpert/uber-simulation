@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join, normalize } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
-import { config } from "./config.js";
+import { config, cities } from "./config.js";
 import { SessionManager } from "./session-manager.js";
 import { createStore } from "./store.js";
 import { AuthService, AuthError } from "./auth.js";
@@ -89,6 +89,11 @@ const server = createServer(async (req, res) => {
       return send(res, 200, { config });
     }
 
+    // ---- /cities → the available worlds you can spin up a session in ----
+    if (seg[0] === "cities" && seg.length === 1 && method === "GET") {
+      return send(res, 200, { cities });
+    }
+
     // ---- /auth → register / login / who-am-I ----
     if (seg[0] === "auth") {
       if (seg[1] === "register" && method === "POST") {
@@ -151,11 +156,19 @@ const server = createServer(async (req, res) => {
       // POST /sessions → create a session. Requires a valid API token so the
       //   world is provably owned by a logged-in user. An empty, idle session is
       //   created; it starts on the first matcher connection (GET /state or ws).
+      //   Every session is a gauntlet across all cities — there is no single-city run.
       if (seg.length === 1 && method === "POST") {
         const user = await auth.userFromToken(tokenFromReq(req, url));
         if (!user) return send(res, 401, { error: "a valid API token is required to create a session" });
         const { id, engine } = manager.create(user);
-        return send(res, 201, { id, creator: engine.creator, status: engine.status });
+        return send(res, 201, {
+          id,
+          creator: engine.creator,
+          cityId: engine.cityId,
+          cityName: engine.cityName,
+          totalLegs: engine.snapshot.totalLegs,
+          status: engine.status,
+        });
       }
 
       const id = seg[1];
